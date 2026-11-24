@@ -466,7 +466,7 @@ function etapaTrilha() {
   process.stdout.write(rodar(py, [path.join(AQUI, "ferramentas", "fundo_sonoro.py"), String(tl.duracao), JSON.stringify(tl.cenas.map((c) => c.ini)), fundo], { env: { ...process.env, PYTHONIOENCODING: "utf-8" } }));
   const lido = spawnSync("ffmpeg", ["-hide_banner", "-i", fundo, "-af", "loudnorm=print_format=json", "-f", "null", "-"], { encoding: "utf8" }).stderr;
   const abreF = lido.lastIndexOf("{"), doFundo = Number(JSON.parse(lido.slice(abreF, lido.indexOf("}", abreF) + 1)).input_i), ganho = -16 - ABAIXO_DA_VOZ - doFundo;
-  rodar("ffmpeg", ["-y", "-v", "error", "-i", voz, "-i", fundo, "-filter_complex", `[1:a]volume=${ganho.toFixed(2)}dB[f];[0:a][f]amix=inputs=2:normalize=0,alimiter=limit=0.84[m]`, "-map", "[m]", "-t", String(tl.duracao), "-ar", "48000", "-ac", "2", final]);
+  rodar("ffmpeg", ["-y", "-v", "error", "-i", voz, "-i", fundo, "-filter_complex", `[1:a]volume=${ganho.toFixed(2)}dB[f];[0:a][f]amix=inputs=2:normalize=0,alimiter=limit=0.84:level=false[m]`, "-map", "[m]", "-t", String(tl.duracao), "-ar", "48000", "-ac", "2", final]);
   console.log(`trilha: ${final} (voz em -16 LUFS; fundo sonoro em ${(-16 - ABAIXO_DA_VOZ).toFixed(0)} LUFS, ${ABAIXO_DA_VOZ} LU abaixo da voz)`);
 }
 
@@ -474,12 +474,14 @@ async function etapaRender() {
   const tl = ler("timeline.json"), { chromium } = acharPlaywright();
   const total = Math.round(tl.duracao * FPS), trabalhadores = Math.max(2, Math.min(8, os.cpus().length - 2));
   const porParte = Math.ceil(total / trabalhadores), t0 = Date.now();
-  const pasta = path.join(TRAB, "partes"); fs.rmSync(pasta, { recursive: true, force: true }); fs.mkdirSync(pasta, { recursive: true });
+  // PARTES=6,7 refaz só essas partes e reaproveita as outras (vale quando a mudança não mexeu na linha do tempo)
+  const so = process.env.PARTES ? process.env.PARTES.split(",").map(Number) : null;
+  const pasta = path.join(TRAB, "partes"); if (!so) fs.rmSync(pasta, { recursive: true, force: true }); fs.mkdirSync(pasta, { recursive: true });
   let feitos = 0;
   const relogio = setInterval(() => process.stdout.write(`\rrender: ${feitos}/${total} quadros (${Math.round((Date.now() - t0) / 1000)} s)   `), 2000);
   await Promise.all(Array.from({ length: trabalhadores }, async (_, w) => {
     const de = w * porParte, ate = Math.min(total, de + porParte);
-    if (de >= ate) return;
+    if (de >= ate || (so && !so.includes(w))) return;
     const { navegador, pagina } = await abrirPagina(chromium);
     // Saída no padrão que o YouTube espera: BT.709, faixa limitada. O JPEG chega em BT.601 de faixa cheia e o
     // PNG em RGB; sem a conversão declarada aqui o vídeo saía marcado errado e as cores mudavam no envio.

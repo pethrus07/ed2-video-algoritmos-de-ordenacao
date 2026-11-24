@@ -40,6 +40,10 @@ CENAS.terminal = {
     this.ladoDe = this.naCena(this.mede.t) + 2.2; this.ladoAte = this.naCena(this.mediu.t) + 2.8;
     this.mini = corridaBubble(Array.from({ length: 18 }, (_, i) => i + 1).sort((a, b) => ruido(a + 7) - ruido(b + 7)));
     this.comparacoes = this.mediu.comparacoes;
+    // no fim, o que os testes conferem entra ao lado da janela, item por item
+    this.testesDe = this.naCena(ultimo.t) + 0.5;
+    const m = /^(\d+) verificações, (\d+) falhas$/.exec(D.testes) || [null, "?", "?"];
+    this.testes = { verificacoes: m[1], falhas: m[2] };
   },
   /** Instante da gravação que está na tela no tempo t da cena. */
   naGravacao(t) {
@@ -74,12 +78,13 @@ CENAS.terminal = {
   },
   /** Câmera: onde a janela fica na tela (x, y, w, h) e que pedaço da gravação aparece nela (sx, sy, sw, sh). */
   camera(t) {
-    const g = this.g, P = this.palco, lado = E.io(fase(t, this.ladoDe, 0.9)) * (1 - E.io(fase(t, this.ladoAte, 0.9)));
+    const g = this.g, P = this.palco, daEspera = E.io(fase(t, this.ladoDe, 0.9)) * (1 - E.io(fase(t, this.ladoAte, 0.9))), dosTestes = E.io(fase(t, this.testesDe, 0.9));
+    const lado = Math.max(daEspera, dosTestes);
     const w = lerp(P.w, P.w * 0.8, lado), h = lerp(P.h, P.h * 0.8, lado), x = lerp(P.x, 96, lado), y = P.y + (P.h - h) / 2;
     let z = 1, pe = 0;
     for (const a of this.aproximacoes) { const k = E.io(fase(t, a.t0, 0.8)) * (1 - E.io(fase(t, a.t1, 0.8))); if (k > 0.001) { z = 1 + (a.z - 1) * k; pe = a.pe; } }
     const sw = g.largura / z, sh = (g.altura - 3) / z;
-    return { x, y, w, h, sx: 0, sy: 3 + pe * (g.altura - 3 - sh), sw, sh, lado };
+    return { x, y, w, h, sx: 0, sy: 3 + pe * (g.altura - 3 - sh), sw, sh, lado, daEspera, dosTestes };
   },
   /** Faixa de leitura sobre uma linha da sessão (pode ser fracionária, enquanto desliza de uma para outra). */
   faixa(ctx, cam, linha, r, cor, alfa) {
@@ -139,8 +144,37 @@ CENAS.terminal = {
     ctx.restore();
 
     // o painel da espera: o que o Bubble Sort está fazendo enquanto a linha dele não sai
-    if (cam.lado > 0.01) {
-      const px = 96 + this.palco.w * 0.8 + 34, pw = W - 96 - px, py = this.palco.y + 6, ph = this.palco.h - 12, a = cam.lado;
+    if (cam.dosTestes > 0.01) {
+      const px = 96 + this.palco.w * 0.8 + 34, pw = W - 96 - px, py = this.palco.y + 6, ph = this.palco.h - 12, a = cam.dosTestes, t0 = this.testesDe + 0.5;
+      ctx.save(); ctx.globalAlpha *= a; ctx.translate((1 - a) * 70, 0);
+      ctx.fillStyle = "rgba(13,20,42,.94)"; caixa(ctx, px, py, pw, ph, 26); ctx.fill();
+      ctx.strokeStyle = comAlfa(COR.verde, 0.85); ctx.lineWidth = 2.5; ctx.stroke();
+      texto(ctx, "TESTES AUTOMÁTICOS", px + 34, py + 62, { tam: 23, peso: 600, cor: COR.verde, espaco: 3 });
+      // o visto se desenha e o número conta até o total
+      const kv = E.out(fase(t, t0, 0.7)), cx = px + 78, cy = py + 150;
+      ctx.strokeStyle = COR.verde; ctx.lineWidth = 8; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.shadowColor = COR.verde; ctx.shadowBlur = 18 + 10 * Math.sin(t * 4);
+      ctx.beginPath(); ctx.arc(cx, cy, 40, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * kv); ctx.stroke();
+      if (kv > 0.5) { const kk = (kv - 0.5) * 2; ctx.beginPath(); ctx.moveTo(cx - 18, cy + 2); ctx.lineTo(cx - 18 + 12 * Math.min(1, kk * 2), cy + 2 + 13 * Math.min(1, kk * 2)); if (kk > 0.5) ctx.lineTo(cx - 6 + 26 * (kk - 0.5) * 2, cy + 15 - 30 * (kk - 0.5) * 2); ctx.stroke(); }
+      ctx.shadowBlur = 0; ctx.shadowColor = "transparent";
+      const total = Number(this.testes.verificacoes) || 0;
+      texto(ctx, String(Math.round(total * E.out5(fase(t, t0, 1.4)))), px + 146, cy + 28, { tam: 88, peso: 700, cor: COR.texto });
+      texto(ctx, "verificações", px + 146 + largura(ctx, String(total), { tam: 88, peso: 700 }) + 18, cy + 6, { tam: 27, cor: COR.fraco });
+      texto(ctx, `${this.testes.falhas} falhas`, px + 146 + largura(ctx, String(total), { tam: 88, peso: 700 }) + 18, cy + 40, { tam: 27, peso: 600, cor: COR.verde });
+      const itens = [["11 casos de borda", "por algoritmo"], ["2.000 vetores sorteados", "por algoritmo, contra o Arrays.sort"], ["contagem exata", "no melhor e no pior caso"], ["limite de n log n", "do Merge Sort"]];
+      itens.forEach(([forte, fraco], i) => {
+        const k = E.out5(fase(t, t0 + 1.2 + i * 1.5, 0.6)), y = py + 268 + i * 86;
+        if (k <= 0) return;
+        ctx.save(); ctx.globalAlpha *= clamp(k); ctx.translate((1 - k) * 40, 0);
+        ctx.fillStyle = comAlfa(COR.verde, 0.16); caixa(ctx, px + 30, y - 34, pw - 60, 72, 14); ctx.fill();
+        ctx.fillStyle = COR.verde; ctx.beginPath(); ctx.arc(px + 56, y + 2, 7, 0, 7); ctx.fill();
+        texto(ctx, forte, px + 80, y - 2, { tam: 27, peso: 600 });
+        texto(ctx, fraco, px + 80, y + 26, { tam: 21, cor: COR.fraco });
+        ctx.restore();
+      });
+      ctx.restore();
+    }
+    if (cam.daEspera > 0.01) {
+      const px = 96 + this.palco.w * 0.8 + 34, pw = W - 96 - px, py = this.palco.y + 6, ph = this.palco.h - 12, a = cam.daEspera;
       const decorrido = clamp(r - this.mede.t, 0, this.mediu.t - this.mede.t), parte = decorrido / (this.mediu.t - this.mede.t), cor = esperando ? COR.ambar : COR.verde;
       ctx.save(); ctx.globalAlpha *= a; ctx.translate((1 - a) * 70, 0);
       ctx.fillStyle = "rgba(13,20,42,.94)"; caixa(ctx, px, py, pw, ph, 26); ctx.fill();
