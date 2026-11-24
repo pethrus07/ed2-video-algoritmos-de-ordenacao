@@ -1,0 +1,19 @@
+# classes compiladas
+out/
+*.class
+
+# o que a produção do vídeo gera: dados, áudio, quadros e o próprio vídeo
+video/trabalho/
+video/narracao/
+*.mp4
+*.mkv
+*.wav
+
+# sistema e editor
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
+__pycache__/
+node_modules/
