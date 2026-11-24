@@ -20,7 +20,9 @@ CENAS.terminal = {
     abre("testes"); linhas.push({ texto: "" }); linhas.push({ texto: "PS> " + testes.comando, comando: true });
     for (const l of testes.linhas) linhas.push({ texto: l.texto, bom: /0 falhas/.test(l.texto) });
     blocos.forEach((b, i) => { b.ate = i + 1 < blocos.length ? blocos[i + 1].de : linhas.length; b.t0 = c.q(b.marca) + 0.25; });
-    blocos.forEach((b, i) => { b.t1 = Math.min(b.t0 + Math.max(1.2, (b.ate - b.de) * 0.16), (i + 1 < blocos.length ? blocos[i + 1].t0 : c.dur) - 0.5); });
+    blocos.forEach((b, i) => { b.t1 = i + 1 < blocos.length ? blocos[i + 1].t0 - 0.3 : Math.min(c.dur - 2.2, b.t0 + 2.4); });
+    // peso de cada linha = quantas letras tem: linha longa demora mais, linha vazia passa rápido
+    blocos.forEach((b) => { b.acumulado = [0]; for (let i = b.de; i < b.ate; i++) b.acumulado.push(b.acumulado[b.acumulado.length - 1] + 5 + linhas[i].texto.length); });
     this.linhas = linhas; this.blocos = blocos;
     this.rotulos = { cmd: "", c1: "Cena 1 · passo a passo", c2: "Cena 2 · casos de borda", c3: "Cena 3 · melhor e pior caso", c4: "Cena 4 · em escala", testes: "Testes automáticos" };
   },
@@ -29,7 +31,9 @@ CENAS.terminal = {
     let n = 0;
     for (const b of this.blocos) {
       if (t < b.t0) break;
-      n = b.de + (b.ate - b.de) * clamp((t - b.t0) / (b.t1 - b.t0));
+      const alvo = clamp((t - b.t0) / (b.t1 - b.t0)) * b.acumulado[b.acumulado.length - 1];
+      let i = 0; while (i < b.ate - b.de - 1 && b.acumulado[i + 1] <= alvo) i++;
+      n = b.de + i + clamp((alvo - b.acumulado[i]) / (b.acumulado[i + 1] - b.acumulado[i]));
     }
     return n;
   },
@@ -52,7 +56,7 @@ CENAS.terminal = {
       let s = l.texto;
       if (i === inteiras) s = s.slice(0, Math.floor(s.length * (n - inteiras))); // a linha que está sendo escrita
       const cor = l.comando ? COR.ciano : l.titulo ? COR.ambar : l.bom ? COR.verde : "#d5def7";
-      texto(ctx, s, x + 40, yl, { tam, mono: true, cor, peso: l.comando || l.bom ? 600 : 450 });
+      texto(ctx, s, x + 40, yl, { tam, mono: true, cor, peso: l.comando || l.bom ? 600 : 450, brilho: l.bom ? 14 + 12 * Math.sin(t * 5) : 0 });
     }
     const some = ctx.createLinearGradient(0, y + 58, 0, y + 58 + 56);
     some.addColorStop(0, "#060a16"); some.addColorStop(1, "rgba(6,10,22,0)");
@@ -149,6 +153,10 @@ CENAS.resumo = {
         ctx.strokeStyle = cor; ctx.lineWidth = 3; ctx.stroke();
         texto(ctx, nome, x + 36, 700, { tam: 48, peso: 650, cor });
         texto(ctx, sub, x + 36, 750, { tam: 28, cor: COR.fraco });
+        for (let b = 0; b < 8; b++) {
+          const ciclo = ((t - qR) * 0.55 + i * 0.4) % 2, kk = E.io(clamp(ciclo < 1 ? ciclo : 2 - ciclo));
+          barra(ctx, x + 350 + lerp([5, 2, 7, 0, 3, 6, 1, 4][b], b, kk) * 14, 690, 10, 16 + b * 5, b / 7, "certa");
+        }
         ctx.restore();
       });
       ctx.restore();

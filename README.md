@@ -96,12 +96,13 @@ E a cena 4, com 100.000 valores, dá a medida da diferença:
 
 | Algoritmo | Comparações | Tempo nesta máquina |
 |---|---|---|
-| Bubble Sort | 4.999.834.079 | perto de 11 s |
-| Insertion Sort | 2.504.337.312 | entre 1 e 2 s |
-| Merge Sort | 1.536.426 | perto de 10 ms |
+| Bubble Sort | 4.999.834.079 | de 11 a 14 s |
+| Insertion Sort | 2.504.337.312 | de 1 a 2 s |
+| Merge Sort | 1.536.426 | de 10 a 20 ms |
 
 Os valores são sorteados com semente fixa, então o número de comparações se repete em qualquer
-máquina. O tempo muda de uma máquina para outra.
+máquina. O tempo muda de uma máquina para outra. Antes de medir, a cena 4 roda os três algoritmos
+algumas vezes sem contar o tempo, para a JVM terminar de compilar o código (aquecimento).
 
 ## Complexidade
 
@@ -146,8 +147,9 @@ A animação é código: cada quadro é desenhado por uma função do tempo, em 
 `<canvas>`, e gravado por um navegador automatizado. Nada ali foi digitado duas vezes:
 
 - os trechos de código que aparecem na tela são lidos de `src/Ordenacao.java`;
-- os números (comparações, tempos, o vetor da corrida) vêm de `java Demonstracao --dados`;
-- a saída do terminal é a do programa de verdade, capturada linha por linha;
+- o vetor da corrida e as contagens vêm de `java Demonstracao --dados`;
+- a saída do terminal é a do programa de verdade, capturada linha por linha, e os números do
+  gráfico em escala são lidos dessa mesma execução;
 - os três algoritmos foram reescritos em JavaScript para a animação, e a produção para se o
   número de comparações deles for diferente do que o Java mediu;
 - a animação acompanha a narração: o áudio é transcrito com o instante de cada palavra, e cada

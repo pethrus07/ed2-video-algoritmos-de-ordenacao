@@ -171,11 +171,11 @@ E o Merge Sort, um milhão e meio.
 
 São mais de três mil vezes menos trabalho.
 
-No relógio, o Bubble Sort levou mais de dez segundos. O Merge Sort, cerca de um centésimo de segundo.
+No relógio, o Bubble Sort levou segundos. O Merge Sort, milésimos de segundo.
 
 É a diferença entre crescer com n ao quadrado e crescer com n log n.
 
-_89 palavras, perto de 37 segundos._
+_83 palavras, perto de 35 segundos._
 
 ## 11 · O programa rodando
 

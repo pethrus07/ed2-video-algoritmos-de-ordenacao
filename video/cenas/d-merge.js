@@ -51,7 +51,7 @@ CENAS.mergeIdeia = {
     const qD = c.q("divide"), qU = c.q("um"), qN = c.q("niveis");
     const durCorte = (qU - qD - 0.4) / 3, corte = (l) => E.io(fase(t, qD + 0.2 + l * durCorte, durCorte * 0.85)); // corte l: do nível l para o l + 1
     const dividindo = t < c.q("intercala") + 2.2;
-    const { k, p } = this.relogio(t), foto = this.antes[Math.min(k, this.antes.length - 1)], ev = dividindo ? null : this.eventos[k];
+    const rel = this.relogio(t), { k, p } = rel, foto = this.antes[Math.min(k, this.antes.length - 1)], ev = dividindo || rel.parado ? null : this.eventos[k];
 
     // ligações entre cada pedaço e as duas metades dele
     for (const no of this.nos) {
@@ -126,6 +126,7 @@ CENAS.mergeIdeia = {
       [c.q("sobe"), "De dois em dois, de baixo para cima."],
       [qN, "Poucos níveis, e cada nível passa uma vez por todos."],
     ], { fim: c.dur - 0.4, y: 990, tam: 32 });
+    vinheta(ctx, t, "3", "Merge Sort", COR.ambar);
   },
 };
 
@@ -211,7 +212,7 @@ CENAS.mergeCodigo = {
   },
 
   parteA(ctx, t, c, a) {
-    const { k, p } = this.relogioA(t), ev = this.evA[k], foto = this.antesA[Math.min(k, this.antesA.length - 1)];
+    const relA = this.relogioA(t), { k, p } = relA, ev = relA.parado ? null : this.evA[k], foto = this.antesA[Math.min(k, this.antesA.length - 1)];
     painelCodigo(ctx, t, 100, 250, 1150, 500, "Ordenacao.java", this.linhasA, this.focosA, { alfa: a, execucao: ev && t > c.q("base") - 1.0 ? this.linhaA[ev.tipo] : -1 });
     ctx.save(); ctx.globalAlpha *= a;
     texto(ctx, "chamadas para 8 elementos", 1300, 300, { tam: 24, cor: COR.fraco, espaco: 2 });
@@ -247,7 +248,7 @@ CENAS.mergeCodigo = {
   },
 
   parteB(ctx, t, c, a) {
-    const { k, p } = this.relogioB(t), ev = this.evB[k], foto = this.antesB[Math.min(k, this.antesB.length - 1)];
+    const relB = this.relogioB(t), { k, p } = relB, ev = relB.parado ? null : this.evB[k], foto = this.antesB[Math.min(k, this.antesB.length - 1)];
     const rodando = t >= c.q("laco") + 0.3;
     painelCodigo(ctx, t, 100, 226, 1150, 790, "Ordenacao.java", this.linhasB, this.focosB, { alfa: a, entrelinha: 1.36, execucao: rodando && ev && t < c.q("custo") ? ev.linha : -1 });
     ctx.save(); ctx.globalAlpha *= a;
@@ -264,7 +265,8 @@ CENAS.mergeCodigo = {
       if (ev && ev.tipo === "leva" && s === ev.origem) cima = null;
       ladrilho(ctx, x(s), yCima, lado, null, 0, "vago");
       ladrilho(ctx, x(s), yBaixo, lado, null, 0, "vago");
-      if (cima != null) ladrilho(ctx, x(s), yCima, lado, cima, f(cima), tipoCima);
+      const onda = k >= this.evB.length ? Math.sin(t * 3 - s * 0.6) * 7 : 0; // depois de pronto, uma onda passa pelo vetor
+      if (cima != null) ladrilho(ctx, x(s), yCima - onda, lado, cima, f(cima), tipoCima);
       if (baixo != null && !copiando) ladrilho(ctx, x(s), yBaixo, lado, baixo, f(baixo), "pronto");
       if (copiando && baixo != null) { const q = E.io(fase(p, s * 0.07, 0.45)); ladrilho(ctx, x(s), lerp(yBaixo, yCima, q), lado, baixo, f(baixo), q > 0 && q < 1 ? "ativo" : "pronto"); }
     }
@@ -292,7 +294,7 @@ CENAS.mergeCodigo = {
     // o custo
     const aC = visivel(t, c.q("custo"), Infinity, 0.5);
     if (aC > 0.01) {
-      texto(ctx, "n · log₂ n", 1300, 800, { tam: 84, peso: 650, mono: true, cor: COR.ambar, alfa: aC * a });
+      texto(ctx, "n · log₂ n", 1300, 800, { tam: 84, peso: 650, mono: true, cor: COR.ambar, alfa: aC * a, brilho: 24 + 22 * Math.sin(t * 2.6) });
       texto(ctx, "comparações, em qualquer caso", 1300, 852, { tam: 28, cor: COR.fraco, alfa: aC * a });
       const a2 = visivel(t, c.q("custo") + 2.6, Infinity, 0.5);
       texto(ctx, "+ n de memória extra (o vetor aux)", 1300, 920, { tam: 30, cor: COR.rosa, alfa: a2 * a });

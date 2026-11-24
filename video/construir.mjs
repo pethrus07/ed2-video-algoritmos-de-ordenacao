@@ -25,7 +25,7 @@ import { CENAS, TITULO, DUPLA, NARRADOR, REPOSITORIO, falaLimpa } from "./roteir
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const RAIZ = path.join(AQUI, "..");
 const TRAB = path.join(AQUI, "trabalho");
-const FPS = 30, ATRASO = 0.5, CAUDA = 0.85; // a fala começa meio segundo depois da cena e a cena dura um pouco além dela
+const FPS = Number(process.env.FPS || 30), ATRASO = 0.5, CAUDA = 0.85; // a fala começa meio segundo depois da cena e a cena dura um pouco além dela
 const num = (i) => String(i + 1).padStart(2, "0");
 const ler = (arq) => JSON.parse(fs.readFileSync(path.join(TRAB, arq), "utf8"));
 const gravar = (arq, obj) => { fs.mkdirSync(path.dirname(path.join(TRAB, arq)), { recursive: true }); fs.writeFileSync(path.join(TRAB, arq), JSON.stringify(obj, null, 1), "utf8"); };
@@ -68,10 +68,26 @@ async function etapaDados() {
     intercalar: extrairMetodo(java, "private static void intercalar(int[] v, int[] aux,"),
   };
   // a sessão do terminal: o programa de verdade, com o instante em que cada linha saiu
-  d.terminal = [];
-  for (const [comando, classe, args] of [[".\\executar.ps1", "Demonstracao", ["--sem-pausa"]], [".\\executar.ps1 testes", "Testes", []]]) {
-    d.terminal.push({ comando, linhas: await capturar(classe, args) });
+  // os números em escala saem da MESMA execução que aparece no terminal do vídeo (cena 4 do programa)
+  const naEscala = /^\s+(Bubble|Insertion|Merge) Sort\s+([\d.]+)\s+([\d.]+)\s+([\d.,]+) ms\s*$/;
+  const lerEscala = (linhas) => {
+    const escala = {};
+    for (const { texto } of linhas) {
+      const m = naEscala.exec(texto);
+      if (m) (escala[m[2].replace(/\./g, "")] ??= {})[m[1].toLowerCase()] = { comparacoes: Number(m[3].replace(/\./g, "")), ms: Number(m[4].replace(/\./g, "").replace(",", ".")) };
+    }
+    if (!escala[100000] || Object.keys(escala[100000]).length !== 3) throw new Error("não achei na saída do programa a tabela em escala (cena 4)");
+    return escala;
+  };
+  // O tempo de relógio depende do que mais a máquina está fazendo. O programa roda três vezes e
+  // fica a execução mais rápida, inteira: o terminal e o gráfico do vídeo mostram essa mesma execução.
+  let melhor = null;
+  for (let rodada = 0; rodada < 3; rodada++) {
+    const linhas = await capturar("Demonstracao", ["--sem-pausa"]), escala = lerEscala(linhas);
+    if (!melhor || escala[100000].bubble.ms < melhor.escala[100000].bubble.ms) melhor = { linhas, escala };
   }
+  d.escala = melhor.escala;
+  d.terminal = [{ comando: ".\\executar.ps1", linhas: melhor.linhas }, { comando: ".\\executar.ps1 testes", linhas: await capturar("Testes", []) }];
   // a fala só pode dizer número que o programa mediu
   const falhas = CENAS.flatMap((c) => (c.confere ? c.confere(d) : []).filter(([ok]) => !ok).map(([, oque]) => `${c.id}: ${oque}`));
   gravar("dados.json", d);
@@ -232,6 +248,33 @@ async function etapaAmostra(arg) {
   if (erros.length || acusados.length) throw new Error([...erros, ...acusados].join("\n"));
 }
 
+/** Título e descrição para o YouTube, com os capítulos nos tempos da linha do tempo atual. */
+function etapaYoutube() {
+  const tl = ler("timeline.json"), mm = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+  // o YouTube corta o título em 100 caracteres: o modelo completo do professor abre a descrição
+  const curto = `Trabalho de Estruturas de Dados 2 - Unipê - Prof. Ed - Ordenação - ${DUPLA}`;
+  const completo = `Trabalho de Estruturas de Dados 2 - Unipê - Prof. Ed - ${TITULO} (Bubble, Insertion e Merge Sort) - ${DUPLA}`;
+  if (curto.length > 100) throw new Error(`título com ${curto.length} caracteres: o YouTube aceita até 100`);
+  const texto = `TÍTULO (${curto.length} caracteres)\n${curto}\n\nDESCRIÇÃO\n${completo}\n\n` +
+    `Três algoritmos de ordenação explicados em animação: a ideia de cada um, o código em Java, uma corrida com a mesma lista e a medição com 100.000 valores.\n\n` +
+    `Código, testes e a animação: https://${REPOSITORIO}\n\n` +
+    tl.cenas.map((c) => `${mm(c.ini)} ${c.capitulo}`).join("\n") + `\n\nNarração: ${NARRADOR}. Animação e código: ${DUPLA}.\n`;
+  fs.writeFileSync(path.join(TRAB, "youtube.txt"), texto, "utf8");
+  console.log(`youtube: ${path.join(TRAB, "youtube.txt")}`);
+}
+
+/** Miniatura para o YouTube (1280x720): o quadro da abertura com o título já assentado. */
+async function etapaMiniatura() {
+  const tl = ler("timeline.json"), { chromium } = acharPlaywright(), { navegador, pagina } = await abrirPagina(chromium);
+  const abertura = tl.cenas[0], cheio = path.join(TRAB, "miniatura-1080.png"), saida = path.join(TRAB, "miniatura.png");
+  await pagina.evaluate((x) => render(x), abertura.ini + abertura.marcas.titulo + 3.2);
+  await pagina.screenshot({ path: cheio });
+  await navegador.close();
+  rodar("ffmpeg", ["-y", "-v", "error", "-i", cheio, "-vf", "scale=1280:720:flags=lanczos", saida]);
+  fs.rmSync(cheio);
+  console.log(`miniatura: ${saida}`);
+}
+
 // ------------------------------------------------------------------ trilha e render
 
 function etapaTrilha() {
@@ -371,6 +414,8 @@ const etapas = { dados: etapaDados, falas: etapaFalas, audio: etapaAudio, palavr
 try {
   if (etapa === "amostra") await etapaAmostra(process.argv[3]);
   else if (etapa === "importar") etapaImportar(process.argv[3]);
+  else if (etapa === "miniatura") await etapaMiniatura();
+  else if (etapa === "youtube") etapaYoutube();
   else if (etapa === "tudo") for (const e of ["dados", "falas", "audio", "palavras", "tempo", "trilha", "legendas", "render"]) await etapas[e]();
   else if (etapas[etapa]) await etapas[etapa]();
   else throw new Error("etapa desconhecida: " + etapa);

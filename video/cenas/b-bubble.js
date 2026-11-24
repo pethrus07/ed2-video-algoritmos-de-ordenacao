@@ -4,8 +4,8 @@
  * Desenha o Bubble Sort em um instante do traço ({k, p}: evento em curso e o quanto ele andou).
  * geo = {x, w, base, alto, rotulos, selo}: caixa onde as barras vivem.
  */
-function desenharBubble(ctx, traco, valores, { k, p }, geo, t) {
-  const n = traco.n, estado = traco.antes[Math.min(k, traco.antes.length - 1)], ev = traco.eventos[k];
+function desenharBubble(ctx, traco, valores, { k, p, parado }, geo, t) {
+  const n = traco.n, estado = traco.antes[Math.min(k, traco.antes.length - 1)], ev = parado ? null : traco.eventos[k];
   const passo = geo.w / n, bw = passo * 0.72, vmax = Math.max(...valores);
   const xDe = (slot) => geo.x + slot * passo + (passo - bw) / 2;
   const hDe = (id) => geo.alto * (0.16 + 0.84 * (valores[id] / vmax));
@@ -83,6 +83,7 @@ CENAS.bubbleIdeia = {
       [c.q("repete"), "A cada passada, a parte por ordenar fica menor."],
       [c.q("fim"), "Passada sem nenhuma troca: está ordenado."],
     ], { fim: c.dur - 0.4 });
+    vinheta(ctx, t, "1", "Bubble Sort", COR.ciano);
   },
 };
 
@@ -106,14 +107,14 @@ CENAS.bubbleCodigo = {
   desenhar(ctx, t, c) {
     cabecalho(ctx, t, "Bubble Sort", "No código: dois laços", COR.ciano);
     const qCusto = c.q("custo"), qDobro = c.q("dobro");
-    const { k, p } = this.relogio(t), ev = this.traco.eventos[k];
+    const rel = this.relogio(t), ev = rel.parado ? null : this.traco.eventos[rel.k];
     const aViz = visivel(t, 0.5, qCusto - 0.2, 0.5);
     painelCodigo(ctx, t, 100, 236, 1170, 720, "Ordenacao.java", this.linhas, this.focos, { execucao: aViz > 0.5 && ev ? this.linhaDoEvento[ev.linha] : -1 });
     // à direita: o mesmo algoritmo rodando
     if (aViz > 0.01) {
       ctx.save(); ctx.globalAlpha *= aViz;
       texto(ctx, "rodando agora", 1330, 300, { tam: 24, cor: COR.fraco, espaco: 2 });
-      const estado = desenharBubble(ctx, this.traco, this.v, { k, p }, { x: 1320, w: 480, base: 760, alto: 330, rotulos: true, arco: 60, faixa: true }, t);
+      const estado = desenharBubble(ctx, this.traco, this.v, rel, { x: 1320, w: 480, base: 760, alto: 330, rotulos: true, arco: 60, faixa: true }, t);
       contador(ctx, 1330, 860, estado.comps, "comparações", { tam: 52 });
       contador(ctx, 1600, 860, estado.trocas, "trocas", { tam: 52, cor: COR.ambar });
       ctx.restore();
@@ -124,9 +125,14 @@ CENAS.bubbleCodigo = {
       ctx.save(); ctx.globalAlpha *= aC;
       const triangulo = (x, y, n, lado, t0, cor) => {
         let feitos = 0; const total = (n * (n - 1)) / 2, mostra = Math.floor(fase(t, t0, 1.6) * total);
+        // depois de cheio, a luz refaz o caminho do algoritmo: uma comparação por vez, passada por passada
+        const luz = mostra >= total ? ((t - t0 - 1.6) * (total / 2.6)) % total : -1;
         for (let passada = 0; passada < n - 1; passada++) for (let j = 0; j < n - 1 - passada; j++) {
-          if (feitos++ >= mostra) return total;
-          ctx.fillStyle = cor; caixa(ctx, x + j * lado, y + passada * lado, lado - 4, lado - 4, 4); ctx.fill();
+          if (feitos >= mostra) return total;
+          const perto = luz < 0 ? 0 : clamp(1 - Math.abs(feitos - luz) / (total * 0.09));
+          ctx.fillStyle = perto > 0 ? mistura(cor, COR.branco, perto * 0.85) : cor;
+          caixa(ctx, x + j * lado, y + passada * lado, lado - 4, lado - 4, 4); ctx.fill();
+          feitos++;
         }
         return total;
       };

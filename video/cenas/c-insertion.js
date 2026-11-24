@@ -21,8 +21,8 @@ function carta(ctx, x, y, w, h, valor, f, o = {}) {
  * Desenha o Insertion Sort em um instante do traço, como cartas ou como barras.
  * geo = {tipo, x, w, y|base, alto, erguer, selo, faixa, rotulos}
  */
-function desenharInsertion(ctx, traco, valores, { k, p }, geo) {
-  const n = traco.n, estado = traco.antes[Math.min(k, traco.antes.length - 1)], ev = traco.eventos[k];
+function desenharInsertion(ctx, traco, valores, { k, p, parado }, geo) {
+  const n = traco.n, estado = traco.antes[Math.min(k, traco.antes.length - 1)], ev = parado ? null : traco.eventos[k];
   const vmax = Math.max(...valores), cartas = geo.tipo === "cartas";
   const passo = geo.w / n, lw = cartas ? passo - 22 : passo * 0.72;
   const xDe = (slot) => geo.x + slot * passo + (passo - lw) / 2;
@@ -103,6 +103,7 @@ CENAS.insertionIdeia = {
       [c.q("parte"), "A parte ordenada cresce uma carta por vez."],
       [qQ + 0.4, "Lista quase ordenada: quase ninguém anda."],
     ], { fim: c.dur - 0.4, y: 990, tam: 32 });
+    vinheta(ctx, t, "2", "Insertion Sort", COR.fucsia);
   },
 };
 
@@ -127,20 +128,20 @@ CENAS.insertionCodigo = {
   },
   desenhar(ctx, t, c) {
     cabecalho(ctx, t, "Insertion Sort", "No código: a chave e a vaga", COR.fucsia);
-    const qC = c.q("custo"), qM = c.q("melhor"), { k, p } = this.relogio(t), ev = this.traco.eventos[k];
+    const qC = c.q("custo"), qM = c.q("melhor"), rel = this.relogio(t), ev = rel.parado ? null : this.traco.eventos[rel.k];
     const aViz = visivel(t, 0.5, qC - 0.2, 0.5);
     painelCodigo(ctx, t, 100, 236, 1170, 620, "Ordenacao.java", this.linhas, this.focos, { execucao: aViz > 0.5 && ev ? this.linhaDoEvento[ev.linha] : -1 });
     if (aViz > 0.01) {
       ctx.save(); ctx.globalAlpha *= aViz;
       texto(ctx, "rodando agora", 1330, 300, { tam: 24, cor: COR.fraco, espaco: 2 });
-      const estado = desenharInsertion(ctx, this.traco, this.v, { k, p }, { tipo: "barras", x: 1320, w: 480, base: 720, alto: 280, erguer: 70, rotulos: true, faixa: true });
+      const estado = desenharInsertion(ctx, this.traco, this.v, rel, { tipo: "barras", x: 1320, w: 480, base: 720, alto: 280, erguer: 70, rotulos: true, faixa: true });
       contador(ctx, 1330, 860, estado.comps, "comparações", { tam: 52 });
       contador(ctx, 1600, 860, estado.movs, "deslocamentos", { tam: 52, cor: COR.ambar });
       ctx.restore();
     }
     // pior e melhor caso, com os números que o programa mediu para 1.000 valores
     const escada = (x, y, subindo, cor, a) => {
-      for (let b = 0; b < 10; b++) { const h = 22 + (subindo ? b : 9 - b) * 15; ctx.fillStyle = comAlfa(cor, a); caixa(ctx, x + b * 26, y - h, 19, h, 5); ctx.fill(); }
+      for (let b = 0; b < 10; b++) { const h = 22 + (subindo ? b : 9 - b) * 15 + Math.sin(t * 3.2 - b * 0.7) * 7; ctx.fillStyle = comAlfa(cor, a); caixa(ctx, x + b * 26, y - h, 19, h, 5); ctx.fill(); }
     };
     const aP = visivel(t, qC, Infinity, 0.5), aM = visivel(t, qM, Infinity, 0.5);
     if (aP > 0.01) {

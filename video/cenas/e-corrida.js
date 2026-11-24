@@ -43,6 +43,8 @@ CENAS.corrida = {
         const valor = q.v[s], ativo = !feito && q.ativos.includes(s);
         let sobe = 0, estado = feito || s >= n - q.prontos ? "certa" : ativo ? "ativa" : "normal";
         if (feito && onda < 1.4) { const kk = fase(onda, s / n * 0.7, 0.5); sobe = Math.sin(kk * Math.PI) * 22; }
+        if (passo === 0) sobe = (Math.sin(t * 3.4 - s * 0.35) + 1) * 5; // à espera da largada
+        if (feito && onda >= 1.4) sobe = (Math.sin(t * 2.4 - s * 0.3) + 1) * 3.5; // já chegou: fica ondulando
         barra(ctx, x0 + s * bw + 1.5, base - sobe, bw - 3, alto * (0.08 + 0.92 * valor / this.vmax), valor / this.vmax, estado, { brilho: ativo ? 18 : 0 });
       }
       if (feito) {
@@ -66,7 +68,13 @@ CENAS.corrida = {
         const y = 440 + i * 130, k = E.out5(fase(t, qP + 0.4 + i * 0.9, 1.0));
         texto(ctx, r.nome, 320, y + 40, { tam: 36, peso: 600 });
         const g = ctx.createLinearGradient(640, 0, 640 + 800, 0); g.addColorStop(0, comAlfa(r.cor, 0.55)); g.addColorStop(1, r.cor);
-        ctx.fillStyle = g; caixa(ctx, 640, y + 6, Math.max(6, (r.comps / max) * 780 * k), 46, 12); ctx.fill();
+        const wBarra = Math.max(6, (r.comps / max) * 780 * k);
+        ctx.fillStyle = g; caixa(ctx, 640, y + 6, wBarra, 46, 12); ctx.fill();
+        // reflexo que atravessa a barra
+        ctx.save(); caixa(ctx, 640, y + 6, wBarra, 46, 12); ctx.clip();
+        const rx = 640 + ((t * 320 + i * 170) % (800 + 260)) - 130, rg = ctx.createLinearGradient(rx, 0, rx + 130, 0);
+        rg.addColorStop(0, "rgba(255,255,255,0)"); rg.addColorStop(0.5, "rgba(255,255,255,.42)"); rg.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = rg; ctx.fillRect(rx, y + 6, 130, 46); ctx.restore();
         texto(ctx, milhar(r.comps * k), 640 + (r.comps / max) * 780 * k + 20, y + 44, { tam: 44, peso: 650, cor: r.cor });
       });
       ctx.restore();

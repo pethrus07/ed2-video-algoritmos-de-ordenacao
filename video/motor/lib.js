@@ -274,10 +274,11 @@ function relogioDeEventos(eventos, trechos) {
     return { ...s, acumulado, total: acumulado[acumulado.length - 1] || 1 };
   });
   const relogio = (t) => {
-    let fim = { k: partes.length ? partes[0].de : 0, p: 0 };
+    // parado = fora de qualquer trecho: a animação mostra a situação, mas nenhum evento está em curso
+    let fim = { k: partes.length ? partes[0].de : 0, p: 0, parado: true };
     for (const s of partes) {
       if (t < s.t0) return fim;
-      if (t >= s.t1) { fim = { k: s.ate, p: 0 }; continue; }
+      if (t >= s.t1) { fim = { k: s.ate, p: 0, parado: true }; continue; }
       const alvo = ((t - s.t0) / (s.t1 - s.t0)) * s.total;
       let a = 0, b = s.acumulado.length - 2;
       while (a < b) { const m = (a + b + 1) >> 1; if (s.acumulado[m] <= alvo) a = m; else b = m - 1; }
@@ -322,5 +323,24 @@ function ladrilho(ctx, x, y, lado, valor, f, tipo = "pronto", o = {}) {
   ctx.shadowBlur = 0;
   if (tipo === "ativo") { ctx.strokeStyle = "#fff"; ctx.lineWidth = Math.max(3, lado * 0.045); ctx.stroke(); }
   texto(ctx, String(valor), x + lado / 2, y + lado / 2 + lado * 0.03, { tam: lado * 0.48, peso: 700, alinha: "center", base: "middle", cor: tipo === "copia" ? "rgba(238,242,255,.5)" : "rgba(6,10,22,.92)" });
+  ctx.restore();
+}
+
+/** Vinheta de capítulo: nos primeiros instantes da cena, o número e o nome do algoritmo ocupam a tela e depois saem. */
+function vinheta(ctx, t, numero, nome, cor) {
+  const a = 1 - E.io(fase(t, 1.05, 0.55));
+  if (a <= 0.005) return;
+  const k = E.out5(fase(t, 0, 0.7)), sai = E.in(fase(t, 1.05, 0.55));
+  ctx.save();
+  ctx.fillStyle = `rgba(7,11,22,${0.96 * a})`; ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = a;
+  const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, 620);
+  g.addColorStop(0, comAlfa(cor, 0.22)); g.addColorStop(1, comAlfa(cor, 0));
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const escala = lerp(1.25, 1, k) + sai * 0.12;
+  ctx.translate(W / 2, H / 2); ctx.scale(escala, escala);
+  texto(ctx, numero, 0, -40, { tam: 330, peso: 700, alinha: "center", cor, brilho: 70, alfa: k });
+  texto(ctx, nome, 0, 130, { tam: 120, peso: 700, alinha: "center", espaco: -3, alfa: E.out(fase(t, 0.18, 0.5)) });
+  ctx.fillStyle = cor; caixa(ctx, -70 * k, 180, 140 * k, 8, 4); ctx.fill();
   ctx.restore();
 }

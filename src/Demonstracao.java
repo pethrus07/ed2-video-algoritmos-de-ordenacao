@@ -119,6 +119,13 @@ public class Demonstracao {
 
     private static void cenaEmEscala() {
         titulo(4, "Em escala: os mesmos valores sorteados para os três");
+        // Aquecimento: a JVM compila o código enquanto ele roda, e as primeiras execuções saem mais
+        // lentas. Sem isto, o primeiro algoritmo medido pagaria esse custo no lugar dos outros.
+        for (int rodada = 0; rodada < 30; rodada++) {
+            for (Algoritmo algoritmo : ALGORITMOS) {
+                algoritmo.ordenar().accept(sortear(2000, rodada));
+            }
+        }
         diga(String.format("  %-16s %10s %18s %14s", "", "n", "comparações", "tempo"));
         for (int n : new int[] {1000, 10000, 100000}) {
             int[] valores = sortear(n, 42);
@@ -138,8 +145,8 @@ public class Demonstracao {
     // ------------------------------------------------------------------ DADOS DA ANIMAÇÃO
 
     /*
-     * A animação do vídeo não tem número digitado à mão: tudo sai daqui, em linhas "chave=valor".
-     * O vetor de 64 valores da corrida também sai daqui, para a animação usar exatamente o mesmo.
+     * A animação do vídeo não tem número digitado à mão: saem daqui, em linhas "chave=valor", os
+     * vetores e as contagens. O vetor de 64 valores da corrida é o mesmo que a animação usa.
      */
     private static void dadosParaAAnimacao() {
         Terminal.saida.println("vetor8=" + junta(VETOR_PEQUENO));
@@ -162,24 +169,8 @@ public class Demonstracao {
             Terminal.saida.println("casos." + chave(algoritmo) + ".ordenado=" + contar(algoritmo, ordenado));
             Terminal.saida.println("casos." + chave(algoritmo) + ".invertido=" + contar(algoritmo, invertido));
         }
-        for (int n : new int[] {1000, 10000, 100000}) {
-            int[] valores = sortear(n, 42);
-            for (Algoritmo algoritmo : ALGORITMOS) {
-                // três medições e fica a menor: a primeira ainda paga o aquecimento da JVM
-                double melhor = Double.MAX_VALUE;
-                long comparacoes = 0;
-                for (int rodada = 0; rodada < (n == 100000 ? 1 : 3); rodada++) {
-                    int[] v = valores.clone();
-                    Ordenacao.zerarComparacoes();
-                    long inicio = System.nanoTime();
-                    algoritmo.ordenar().accept(v);
-                    melhor = Math.min(melhor, (System.nanoTime() - inicio) / 1e6);
-                    comparacoes = Ordenacao.comparacoes();
-                }
-                Terminal.saida.println("escala." + n + "." + chave(algoritmo) + ".comparacoes=" + comparacoes);
-                Terminal.saida.println("escala." + n + "." + chave(algoritmo) + ".ms=" + String.format(Locale.ROOT, "%.2f", melhor));
-            }
-        }
+        // Os números da cena 4 (comparações e tempo em escala) não saem daqui: a animação lê a própria
+        // saída da cena 4, para o gráfico e o terminal do vídeo mostrarem a mesma execução.
     }
 
     private static String chave(Algoritmo algoritmo) {

@@ -109,7 +109,7 @@ export const CENAS = [
 {{insertion}} O Insertion Sort, dois bilhões e meio.
 {{merge}} E o Merge Sort, um milhão e meio.
 {{vezes}} São mais de três mil vezes menos trabalho.
-{{tempo}} No relógio, o Bubble Sort levou mais de dez segundos. O Merge Sort, cerca de um centésimo de segundo.
+{{tempo}} No relógio, o Bubble Sort levou segundos. O Merge Sort, milésimos de segundo.
 {{curvas}} É a diferença entre crescer com n ao quadrado e crescer com n log n.`,
     confere: (d) => {
       const e = d.escala[100000];
@@ -118,8 +118,9 @@ export const CENAS = [
         [Math.abs(e.insertion.comparacoes - 2.5e9) < 0.1e9, "a fala diz dois bilhões e meio do Insertion Sort"],
         [Math.abs(e.merge.comparacoes - 1.5e6) < 0.1e6, "a fala diz um milhão e meio do Merge Sort"],
         [e.bubble.comparacoes / e.merge.comparacoes > 3000, "a fala diz mais de três mil vezes"],
-        [e.bubble.ms > 10000, "a fala diz que o Bubble Sort levou mais de dez segundos"],
-        [e.merge.ms > 5 && e.merge.ms < 20, "a fala diz cerca de um centésimo de segundo para o Merge Sort"],
+        // o tempo muda com a máquina e até com a temperatura dela: a fala só afirma a ordem de grandeza
+        [e.bubble.ms >= 2000, "a fala diz que o Bubble Sort levou segundos"],
+        [e.merge.ms < 200, "a fala diz que o Merge Sort levou milésimos de segundo"],
       ];
     },
   },
