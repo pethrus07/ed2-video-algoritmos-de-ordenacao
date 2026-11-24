@@ -19,7 +19,7 @@ const trechos = CENAS.map((c, i) => {
   return `<section><h2><b>${String(i + 1).padStart(2, "0")}</b>${esc(c.capitulo)}<span>~${Math.round(palavras / 2.4)} s</span></h2>${frases.map((f) => `<p>${esc(f)}</p>`).join("")}</section>`;
 }).join("");
 
-const html = `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><style>
+const html = `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>Narração · ${esc(TITULO)}</title><style>
   @page { size: 148mm 210mm; margin: 14mm 13mm; }
   body { font-family: "Segoe UI", system-ui, sans-serif; color: #111827; font-size: 14.5pt; line-height: 1.5; }
   h1 { font-size: 22pt; margin: 0 0 2mm; letter-spacing: -.3pt; }
@@ -42,6 +42,7 @@ const html = `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><style>
   <li>Errou? Pare, respire e repita a frase inteira.</li>
   <li>Lugar silencioso, celular a um palmo da boca, sem ventilador perto.</li>
   <li>"n ao quadrado" e "n log n" se leem assim mesmo.</li>
+  <li>No trecho 11, respire um segundo entre um parágrafo e outro: cada parágrafo acompanha um pedaço da gravação do terminal.</li>
 </ul></div>
 ${trechos}</html>`;
 

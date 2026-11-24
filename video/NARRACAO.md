@@ -17,9 +17,9 @@ Eu sou o Izaias Terto e, junto com o Pedro Oliveira, apresento este trabalho de 
 
 Vamos ver três algoritmos: o Bubble Sort, o Insertion Sort e o Merge Sort.
 
-E descobrir por que um deles chega a ser milhares de vezes mais rápido que os outros.
+E descobrir por que um deles termina em milésimos de segundo o que outro leva segundos para fazer.
 
-_80 palavras, perto de 33 segundos._
+_81 palavras, perto de 34 segundos._
 
 ## 02 · Por que ordenar
 
@@ -179,21 +179,27 @@ _83 palavras, perto de 35 segundos._
 
 ## 11 · O programa rodando
 
-Agora o programa rodando.
+Agora, na prática. Esta é a gravação do nosso terminal.
 
-Este é o código Java do nosso repositório, executado no terminal.
+Primeiro compilamos o código com o javac.
 
-Primeiro ele ordena um vetor de oito valores e mostra cada etapa dos três algoritmos.
+E rodamos a demonstração. Ela começa com o mesmo vetor de oito valores dos exemplos. O Bubble Sort mostra o vetor ao fim de cada passada: foram cinco passadas e 25 comparações.
 
-Depois vêm os casos de borda: vetor vazio, de um elemento, com repetidos, com negativos. Os três algoritmos têm de concordar.
+O Insertion Sort mostra cada encaixe, e resolve com 18.
+
+E o Merge Sort mostra cada intercalação, com 17 comparações.
+
+Depois vêm os casos de borda: vetor vazio, de um elemento, com repetidos, com negativos. Os três algoritmos têm de devolver a mesma resposta.
 
 Aqui, o melhor e o pior caso com mil valores. Com a lista já ordenada, o Bubble e o Insertion fazem só 999 comparações. Com a lista invertida, quase quinhentas mil.
 
-E a medição em escala, de onde saíram os números que você acabou de ver.
+Por último, a medição em escala. Com mil e com dez mil valores, a resposta sai na hora. Com cem mil, repare: o programa parou na linha do Bubble Sort. Neste momento ele está fazendo quase cinco bilhões de comparações. É o n ao quadrado acontecendo de verdade.
 
-Por fim, os testes. Cada algoritmo é comparado com a ordenação do próprio Java em dois mil vetores sorteados.
+Pronto. O Insertion Sort vem logo depois, e o Merge Sort termina tão rápido que nem dá para ver.
 
-_116 palavras, perto de 48 segundos._
+Para fechar, os testes automáticos. Cada algoritmo é comparado com a ordenação do próprio Java em dois mil vetores sorteados. Quarenta e duas verificações, nenhuma falha.
+
+_217 palavras, perto de 90 segundos._
 
 ## 12 · Comparação
 

@@ -67,16 +67,20 @@ video/
   NARRACAO.md         o texto da narração, trecho por trecho
   cena.html           a página que desenha os quadros
   motor/, cenas/      a animação, escrita em JavaScript puro sobre <canvas>
-  construir.mjs       a linha de produção: dados, áudio, sincronia e render
-  ferramentas/        voz de prévia e transcrição com tempos (Python)
+  construir.mjs       a linha de produção: gravação do terminal, dados, áudio, sincronia e render
+  ferramentas/        a sessão gravada do terminal, a transcrição com tempos, o fundo sonoro
 executar.ps1, executar.sh
 ```
+
+O código está comentado em dois níveis: em cima de cada método, o que ele faz e por que funciona;
+dentro dele, uma linha antes de cada decisão (por que o laço encolhe, por que a chave é guardada,
+por que o empate leva o da esquerda). São esses mesmos comentários que aparecem no vídeo.
 
 ## As quatro cenas da demonstração
 
 | Cena | O que mostra |
 |---|---|
-| 1 | O mesmo vetor de 8 valores ordenado pelos três, etapa por etapa |
+| 1 | O mesmo vetor de 8 valores ordenado pelos três, etapa por etapa, com uma pausa entre um algoritmo e outro |
 | 2 | Casos de borda: vazio, um elemento, repetidos, negativos, já ordenado, invertido |
 | 3 | Melhor e pior caso: comparações para ordenar 1.000 valores |
 | 4 | Em escala: 1.000, 10.000 e 100.000 valores, com comparações e tempo |
@@ -94,15 +98,18 @@ A cena 3 imprime a tabela que resume o comportamento de cada um:
 
 E a cena 4, com 100.000 valores, dá a medida da diferença:
 
-| Algoritmo | Comparações | Tempo nesta máquina |
+| Algoritmo | Comparações | Tempo nas nossas medições |
 |---|---|---|
-| Bubble Sort | 4.999.834.079 | de 11 a 14 s |
-| Insertion Sort | 2.504.337.312 | de 1 a 2 s |
-| Merge Sort | 1.536.426 | de 10 a 20 ms |
+| Bubble Sort | 4.999.834.079 | de 12 a 22 s |
+| Insertion Sort | 2.504.337.312 | de 1 a 3 s |
+| Merge Sort | 1.536.426 | de 10 a 30 ms |
 
 Os valores são sorteados com semente fixa, então o número de comparações se repete em qualquer
-máquina. O tempo muda de uma máquina para outra. Antes de medir, a cena 4 roda os três algoritmos
-algumas vezes sem contar o tempo, para a JVM terminar de compilar o código (aquecimento).
+máquina. O tempo muda de uma máquina para outra, e na mesma máquina muda com o que mais ela está
+fazendo: por isso a tabela dá uma faixa, e o vídeo mostra a medição da execução que foi gravada.
+Antes de medir, a cena 4 roda os três algoritmos algumas vezes sem contar o tempo, para a JVM
+terminar de compilar o código (aquecimento). O nome do algoritmo sai na tela antes da medição,
+então dá para ver o programa parado na linha do Bubble Sort enquanto ele trabalha.
 
 ## Complexidade
 
@@ -146,19 +153,26 @@ repetidos, negativos, extremos do `int`...) e 2.000 vetores sorteados comparados
 A animação é código: cada quadro é desenhado por uma função do tempo, em JavaScript sobre
 `<canvas>`, e gravado por um navegador automatizado. Nada ali foi digitado duas vezes:
 
-- os trechos de código que aparecem na tela são lidos de `src/Ordenacao.java`;
+- os trechos de código que aparecem na tela são lidos de `src/Ordenacao.java`, com os comentários;
 - o vetor da corrida e as contagens vêm de `java Demonstracao --dados`;
-- a saída do terminal é a do programa de verdade, capturada linha por linha, e os números do
-  gráfico em escala são lidos dessa mesma execução;
+- a cena do terminal é uma gravação de tela do Windows Terminal: `javac`, a demonstração e os
+  testes rodando de verdade, na velocidade real. A espera do Bubble Sort com 100.000 valores está
+  inteira, sem corte. Só a espera entre um comando e outro foi ajustada à narração. Na gravação
+  os programas rodam com prioridade alta, para a medição depender menos do resto da máquina;
+- os números do gráfico em escala são os dessa mesma execução gravada;
 - os três algoritmos foram reescritos em JavaScript para a animação, e a produção para se o
   número de comparações deles for diferente do que o Java mediu;
+- os números medidos que a narração cita (comparações, passadas, tempos, resultado dos testes)
+  são conferidos contra o que o programa produziu, e a produção para se algum não bater;
 - a animação acompanha a narração: o áudio é transcrito com o instante de cada palavra, e cada
-  ponto de sincronia do roteiro é ligado ao momento em que a frase é dita.
+  ponto de sincronia do roteiro é ligado ao momento em que a frase é dita;
+- o fundo sonoro é gerado por código (acordes longos, sem arquivo de terceiros).
 
-Para refazer (Node 20, ffmpeg e Playwright; a transcrição usa faster-whisper):
+Para refazer (Windows, Node 20, ffmpeg e Playwright; a transcrição usa faster-whisper):
 
 ```sh
-node video/construir.mjs tudo
+node video/construir.mjs gravar   # abre o Windows Terminal e grava a execução (1 minuto, usa a tela)
+node video/construir.mjs tudo     # dados, falas, áudio, sincronia, trilha, legendas e render
 ```
 
 Os áudios da narração ficam em `video/narracao/`, um por cena, fora do repositório. Sem eles a

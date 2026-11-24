@@ -179,13 +179,15 @@ function colorir(linha) {
   while ((m = re.exec(codigo))) {
     pedacos.push({ s: m[0], cor: m[1] ? "#7dd3fc" : m[2] ? "#fda4af" : m[3] ? "#fde68a" : "#dbe4ff" });
   }
-  if (iComentario >= 0) pedacos.push({ s: linha.slice(iComentario), cor: "#7180a0", italico: true });
+  if (iComentario >= 0) pedacos.push({ s: linha.slice(iComentario), cor: "#7fbf9e", italico: true });
   return pedacos;
 }
 
 /**
  * Painel de código. `focos` é a lista [{t, i, j}]: a partir do instante t, as linhas i..j ficam acesas.
- * A faixa de destaque desliza de um foco para o outro.
+ * A faixa de destaque desliza de um foco para o outro. Quando o método não cabe inteiro com letra grande,
+ * o painel se aproxima do trecho em foco e rola até ele; sem foco, recua e mostra o método todo.
+ * Um foco sem linhas e com `manter` apaga o destaque sem recuar.
  */
 function painelCodigo(ctx, t, x, y, w, h, arquivo, linhas, focos, o = {}) {
   const a = o.alfa ?? 1;
@@ -201,32 +203,47 @@ function painelCodigo(ctx, t, x, y, w, h, arquivo, linhas, focos, o = {}) {
   texto(ctx, arquivo, x + w / 2, y + 30, { tam: 22, cor: COR.fraco, alinha: "center", base: "middle", mono: true });
 
   const colunas = Math.max(...linhas.map((l) => l.length), 10);
-  const topo = y + 58 + 26, util = h - 58 - 52;
-  const entrelinha = o.entrelinha || 1.5;
-  const tam = Math.min(o.tamMax || 34, util / linhas.length / entrelinha, (w - 150) / (colunas * 0.602));
-  const passo = tam * entrelinha, x0 = x + 104;
+  const topo = y + 58 + 24, util = h - 58 - 46, entrelinha = o.entrelinha || 1.5;
+  const tamPerto = Math.min(o.tamMax || 34, (w - 150) / (colunas * 0.602));
+  const tamTudo = Math.min(tamPerto, util / linhas.length / entrelinha);
+  const cabemPerto = util / (tamPerto * entrelinha);
 
   // foco atual e anterior, com transição
   let k = -1;
   for (let n = 0; n < focos.length; n++) if (t >= focos[n].t) k = n;
   const atual = k >= 0 ? focos[k] : null, anterior = k > 0 ? focos[k - 1] : null;
-  const p = atual ? E.io(fase(t, atual.t, 0.42)) : 0;
+  const p = atual ? E.io(fase(t, atual.t, 0.55)) : 0;
   const temFoco = atual && atual.i >= 0;
-  if (temFoco) {
-    const de = anterior && anterior.i >= 0 ? anterior : atual;
-    const yi = lerp(de.i, atual.i, p), yj = lerp(de.j, atual.j, p);
-    const fy = topo + yi * passo - 6, fh = (yj - yi + 1) * passo + 4;
-    const cor = atual.cor || COR.ciano;
-    ctx.fillStyle = comAlfa(cor, 0.13 * (anterior && anterior.i >= 0 ? 1 : p)); caixa(ctx, x + 14, fy, w - 28, fh, 12); ctx.fill();
-    ctx.fillStyle = comAlfa(cor, anterior && anterior.i >= 0 ? 1 : p); caixa(ctx, x + 14, fy, 6, fh, 3); ctx.fill();
+  // a vista (tamanho da letra e rolagem) de cada foco
+  const vistaDe = (n) => {
+    for (let q = n; q >= 0; q--) {
+      const f = focos[q];
+      if (f.i >= 0) return { tam: tamPerto, rola: clamp((f.i + f.j + 1) / 2 - cabemPerto / 2, 0, Math.max(0, linhas.length - cabemPerto)) };
+      if (!f.manter) break;
+    }
+    return { tam: tamTudo, rola: 0 };
+  };
+  const va = vistaDe(Math.max(0, k - 1)), vb = vistaDe(Math.max(0, k));
+  const tam = lerp(va.tam, vb.tam, p), rola = lerp(va.rola, vb.rola, p), passo = tam * entrelinha, x0 = x + 104;
+  const yDe = (linha) => topo + (linha - rola) * passo;
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(x + 2, y + 60, w - 4, h - 64); ctx.clip();
+  if (temFoco || (anterior && anterior.i >= 0)) {
+    const de = anterior && anterior.i >= 0 ? anterior : atual, para = temFoco ? atual : anterior;
+    const yi = lerp(de.i, para.i, p), yj = lerp(de.j, para.j, p);
+    const fy = yDe(yi) - 6, fh = (yj - yi + 1) * passo + 4;
+    const cor = (temFoco ? atual.cor : anterior.cor) || COR.ciano;
+    const forca = temFoco ? (anterior && anterior.i >= 0 ? 1 : p) : 1 - p;
+    ctx.fillStyle = comAlfa(cor, 0.13 * forca); caixa(ctx, x + 14, fy, w - 28, fh, 12); ctx.fill();
+    ctx.fillStyle = comAlfa(cor, forca); caixa(ctx, x + 14, fy, 6, fh, 3); ctx.fill();
   }
   linhas.forEach((linha, n) => {
-    const yl = topo + n * passo + tam * 0.78;
-    let acesa = 1;
-    if (temFoco) {
-      const dentroAtual = n >= atual.i && n <= atual.j, dentroAntes = anterior && anterior.i >= 0 && n >= anterior.i && n <= anterior.j;
-      acesa = lerp(dentroAntes || !anterior || anterior.i < 0 ? 1 : 0.36, dentroAtual ? 1 : 0.36, p);
-    }
+    const yl = yDe(n) + tam * 0.78;
+    if (yl < y + 40 || yl > y + h + 20) return;
+    const dentro = (f) => f && f.i >= 0 && n >= f.i && n <= f.j;
+    const antes = !anterior || anterior.i < 0 ? 1 : dentro(anterior) ? 1 : 0.36, depois = !temFoco ? 1 : dentro(atual) ? 1 : 0.36;
+    const acesa = lerp(antes, depois, p);
     texto(ctx, String(n + 1).padStart(2, " "), x + 34, yl, { tam: tam * 0.78, mono: true, cor: COR.apagado, alfa: 0.75 * acesa });
     let cx = x0;
     for (const pedaco of colorir(linha)) {
@@ -236,25 +253,56 @@ function painelCodigo(ctx, t, x, y, w, h, arquivo, linhas, focos, o = {}) {
   });
   // bolinha de execução: mostra em que linha o algoritmo da direita está agora
   if (o.execucao != null && o.execucao >= 0) {
-    const ye = topo + o.execucao * passo + passo / 2 - 4;
+    const ye = yDe(o.execucao) + passo / 2 - 4;
     ctx.fillStyle = COR.ambar; ctx.shadowColor = COR.ambar; ctx.shadowBlur = 16;
     ctx.beginPath(); ctx.arc(x + 84, ye, 6, 0, 7); ctx.fill();
+    ctx.shadowBlur = 0; ctx.shadowColor = "transparent";
   }
+  // o que rolou para fora some aos poucos nas bordas
+  const sobraEmCima = clamp(rola), sobraEmBaixo = clamp(linhas.length - rola - util / passo);
+  for (const [cima, forca] of [[true, sobraEmCima], [false, sobraEmBaixo]]) {
+    if (forca <= 0.01) continue;
+    const gy = cima ? y + 60 : y + h - 64, g = ctx.createLinearGradient(0, gy, 0, gy + 60);
+    g.addColorStop(cima ? 0 : 1, `rgba(10,16,34,${0.96 * forca})`); g.addColorStop(cima ? 1 : 0, "rgba(10,16,34,0)");
+    ctx.fillStyle = g; ctx.fillRect(x + 2, gy, w - 4, 60);
+  }
+  ctx.restore();
   ctx.restore();
 }
 /** Converte focos descritos por trechos de texto ({t, de, ate}) em índices de linha. Erro se o trecho sumiu. */
 function resolverFocos(nome, linhas, focos) {
   let cursor = 0;
   return focos.map((f) => {
-    if (!f.de) return { t: f.t, i: -1, j: -1 };
-    const i = linhas.findIndex((l, n) => n >= (f.doInicio ? 0 : cursor) && l.includes(f.de));
+    if (!f.de) return { t: f.t, i: -1, j: -1, manter: f.manter };
+    let i = linhas.findIndex((l, n) => n >= (f.doInicio ? 0 : cursor) && l.includes(f.de));
     const j = f.ate ? linhas.findIndex((l, n) => n >= i && l.includes(f.ate)) : i;
     if (i < 0 || j < 0) { (window.ERROS = window.ERROS || []).push(`${nome}: trecho de código não encontrado (${f.de} … ${f.ate || ""})`); return { t: f.t, i: -1, j: -1 }; }
     cursor = i + 1;
+    // o comentário que explica o trecho acende junto com ele
+    while (i > 0 && linhas[i - 1].trim().startsWith("//")) i--;
     return { t: f.t, i, j, cor: f.cor };
   });
 }
 const linhaDe = (linhas, trecho) => linhas.findIndex((l) => l.includes(trecho));
+
+// ------------------------------------------------------------------ luz e câmera
+
+/** Um brilho que atravessa o retângulo, da esquerda para a direita, a cada `periodo` segundos. */
+function brilhoVarre(ctx, t, x, y, w, h, o = {}) {
+  const periodo = o.periodo || 2.6, faixa = o.faixa || Math.max(90, w * 0.22), k = (((t + (o.atraso || 0)) % periodo) + periodo) % periodo / periodo;
+  const cx = x - faixa + (w + 2 * faixa) * E.io(k);
+  ctx.save();
+  caixa(ctx, x, y, w, h, o.raio ?? 12); ctx.clip();
+  const g = ctx.createLinearGradient(cx - faixa / 2, 0, cx + faixa / 2, 0);
+  g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(0.5, `rgba(255,255,255,${o.forca ?? 0.4})`); g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = g; ctx.fillRect(cx - faixa / 2, y, faixa, h);
+  ctx.restore();
+}
+/** Aproximação lenta de câmera sobre o centro da tela, para cartões de texto: chame entre save() e restore(). */
+function aproximar(ctx, k, quanto = 0.045) {
+  const s = 1 + quanto * clamp(k);
+  ctx.translate(W / 2, H / 2); ctx.scale(s, s); ctx.translate(-W / 2, -H / 2);
+}
 
 // ------------------------------------------------------------------ eventos no tempo
 

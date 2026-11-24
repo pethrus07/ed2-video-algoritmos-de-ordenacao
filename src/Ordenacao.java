@@ -49,7 +49,9 @@ public class Ordenacao {
     public static void bubbleSort(int[] v) {
         for (int passada = 0; passada < v.length - 1; passada++) {
             boolean trocou = false;
+            // os últimos valores já estão no lugar: o laço encolhe
             for (int j = 0; j < v.length - 1 - passada; j++) {
+                // vizinhos fora de ordem? troca os dois
                 if (maior(v[j], v[j + 1])) {
                     int aux = v[j];
                     v[j] = v[j + 1];
@@ -58,6 +60,7 @@ public class Ordenacao {
                 }
             }
             mostrar(v, "passada " + (passada + 1));
+            // passada sem troca: o vetor já está ordenado
             if (!trocou) {
                 break;
             }
@@ -71,13 +74,17 @@ public class Ordenacao {
      * os maiores que ele andam uma casa para a direita e a chave entra na vaga que sobrou.
      */
     public static void insertionSort(int[] v) {
+        // v[0] sozinho já está ordenado: começa do segundo
         for (int i = 1; i < v.length; i++) {
+            // guarda a chave: a posição dela vai ser sobrescrita
             int chave = v[i];
             int j = i - 1;
+            // os maiores que a chave andam uma casa para a direita
             while (j >= 0 && maior(v[j], chave)) {
                 v[j + 1] = v[j];
                 j--;
             }
+            // a vaga que sobrou é o lugar da chave
             v[j + 1] = chave;
             mostrar(v, "encaixou o " + chave);
         }
@@ -95,13 +102,18 @@ public class Ordenacao {
      * Dividir para conquistar: ordena cada metade com o próprio mergeSort e depois intercala.
      * O caso base é o trecho de um elemento (ou vazio), que já está ordenado.
      */
-    private static void mergeSort(int[] v, int[] aux, int inicio, int fim) {
+    private static void mergeSort(int[] v, int[] aux,
+            int inicio, int fim) {
+        // caso base: um elemento (ou nenhum) já está ordenado
         if (inicio >= fim) {
             return;
         }
+        // o meio, sem estourar o int em vetores muito grandes
         int meio = inicio + (fim - inicio) / 2;
+        // ordena cada metade com o próprio mergeSort
         mergeSort(v, aux, inicio, meio);
         mergeSort(v, aux, meio + 1, fim);
+        // junta as duas metades, que agora estão ordenadas
         intercalar(v, aux, inicio, meio, fim);
     }
 
@@ -110,23 +122,27 @@ public class Ordenacao {
      * Em caso de empate leva o da esquerda: é isso que mantém a ordenação estável.
      */
     private static void intercalar(int[] v, int[] aux,
-                                   int inicio, int meio, int fim) {
-        int i = inicio;
-        int j = meio + 1;
-        int k = inicio;
+            int inicio, int meio, int fim) {
+        int i = inicio;      // anda na metade esquerda
+        int j = meio + 1;    // anda na metade direita
+        int k = inicio;      // próxima vaga do auxiliar
+        // leva sempre o menor entre os dois primeiros
         while (i <= meio && j <= fim) {
             if (maior(v[i], v[j])) {
                 aux[k++] = v[j++];
             } else {
+                // no empate vai o da esquerda (estável)
                 aux[k++] = v[i++];
             }
         }
+        // uma metade acabou: copia o que sobrou da outra
         while (i <= meio) {
             aux[k++] = v[i++];
         }
         while (j <= fim) {
             aux[k++] = v[j++];
         }
+        // devolve o trecho ordenado para o vetor original
         for (k = inicio; k <= fim; k++) {
             v[k] = aux[k];
         }

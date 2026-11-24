@@ -34,11 +34,14 @@ function desenharBubble(ctx, traco, valores, { k, p, parado }, geo, t) {
   if (geo.bolhas && t != null) {
     traco.eventos.forEach((e, i) => {
       if (e.tipo !== "trava") return;
-      const dt = t - geo.relogio.inicio(i);
-      if (dt < 0 || dt > 1.8) return;
+      const dt = t - geo.relogio.inicio(i), seguinte = geo.relogio.inicio(i + 1);
+      const vida = Math.max(1.8, Math.min(9, isFinite(seguinte) ? seguinte - geo.relogio.inicio(i) : 1.8));
+      if (dt < 0 || dt > vida + 1.6) return;
       const id = traco.antes[i].ordem[e.slot], bx = xDe(e.slot) + bw / 2, topo = geo.base - hDe(id);
       for (let b = 0; b < 9; b++) {
-        const r0 = ruido(i * 31 + b), kk = clamp(dt / (1.1 + r0 * 0.7));
+        const r0 = ruido(i * 31 + b), periodo = 1.1 + r0 * 0.7, meu = dt - b * 0.16;
+        if (meu < 0 || meu - (meu % periodo) > vida - 0.5) continue; // depois da espera, não nasce bolha nova
+        const kk = (meu % periodo) / periodo;
         const y = topo - 30 - kk * (140 + r0 * 150), x = bx + (r0 - 0.5) * 90 + Math.sin(dt * 5 + b) * 10;
         ctx.strokeStyle = corValor(valores[id] / vmax, 1.15, (1 - kk) * 0.85); ctx.lineWidth = 2.5;
         ctx.beginPath(); ctx.arc(x, y, 6 + r0 * 13, 0, 7); ctx.stroke();
@@ -58,6 +61,7 @@ CENAS.bubbleIdeia = {
     this.v = D.vetor8; this.traco = tracoBubble(this.v);
     const ev = this.traco.eventos, travas = ev.map((e, i) => (e.tipo === "trava" ? i : -1)).filter((i) => i >= 0);
     const fimPassada1 = travas[0] + 1, inicioUltima = travas[travas.length - 2] + 1;
+    this.passadas = travas.length;
     this.relogio = relogioDeEventos(ev, [
       { de: 0, ate: fimPassada1, t0: c.q("regra") + 0.3, t1: c.q("passada") + 1.4 },
       { de: fimPassada1, ate: inicioUltima, t0: c.q("repete") + 0.2, t1: c.q("fim") - 0.3 },
@@ -73,7 +77,7 @@ CENAS.bubbleIdeia = {
     ctx.save(); ctx.globalAlpha *= a;
     ctx.fillStyle = "rgba(13,20,42,.8)"; caixa(ctx, 1500, 330, 300, 430, 26); ctx.fill();
     ctx.strokeStyle = COR.borda; ctx.lineWidth = 2; ctx.stroke();
-    contador(ctx, 1540, 430, estado.passada + (estado.certos.every(Boolean) ? 0 : 1), "passada", { cor: COR.ciano });
+    contador(ctx, 1540, 430, Math.min(this.passadas, estado.passada + 1), "passada", { cor: COR.ciano });
     contador(ctx, 1540, 560, estado.comps, "comparações");
     contador(ctx, 1540, 690, estado.trocas, "trocas", { cor: COR.ambar });
     ctx.restore();
@@ -98,7 +102,7 @@ CENAS.bubbleCodigo = {
       { t: c.q("compara"), de: "if (maior(v[j], v[j + 1]))" },
       { t: c.q("troca"), de: "int aux = v[j];", ate: "v[j + 1] = aux;", cor: COR.ambar },
       { t: c.q("flag"), de: "if (!trocou) {", ate: "}", cor: COR.verde },
-      { t: c.q("custo") },
+      { t: c.q("custo"), de: "for (int j = 0", ate: "if (maior(v[j], v[j + 1]))", cor: COR.rosa, doInicio: true },
     ]);
     this.linhaDoEvento = { cmp: linhaDe(this.linhas, "if (maior("), troca: linhaDe(this.linhas, "v[j] = v[j + 1];"), fimPassada: linhaDe(this.linhas, "if (!trocou)"), fim: this.linhas.length - 1 };
     this.v = D.vetor8; this.traco = tracoBubble(this.v);
@@ -109,7 +113,7 @@ CENAS.bubbleCodigo = {
     const qCusto = c.q("custo"), qDobro = c.q("dobro");
     const rel = this.relogio(t), ev = rel.parado ? null : this.traco.eventos[rel.k];
     const aViz = visivel(t, 0.5, qCusto - 0.2, 0.5);
-    painelCodigo(ctx, t, 100, 236, 1170, 720, "Ordenacao.java", this.linhas, this.focos, { execucao: aViz > 0.5 && ev ? this.linhaDoEvento[ev.linha] : -1 });
+    painelCodigo(ctx, t, 100, 226, 1190, 780, "Ordenacao.java", this.linhas, this.focos, { execucao: aViz > 0.5 && ev ? this.linhaDoEvento[ev.linha] : -1 });
     // à direita: o mesmo algoritmo rodando
     if (aViz > 0.01) {
       ctx.save(); ctx.globalAlpha *= aViz;
@@ -123,15 +127,16 @@ CENAS.bubbleCodigo = {
     const aC = visivel(t, qCusto, Infinity, 0.5);
     if (aC > 0.01) {
       ctx.save(); ctx.globalAlpha *= aC;
+      const DUR = 3.0; // as comparações entram uma a uma, no ritmo da fala
       const triangulo = (x, y, n, lado, t0, cor) => {
-        let feitos = 0; const total = (n * (n - 1)) / 2, mostra = Math.floor(fase(t, t0, 1.6) * total);
-        // depois de cheio, a luz refaz o caminho do algoritmo: uma comparação por vez, passada por passada
-        const luz = mostra >= total ? ((t - t0 - 1.6) * (total / 2.6)) % total : -1;
+        let feitos = 0; const total = (n * (n - 1)) / 2, mostra = Math.floor(fase(t, t0, DUR) * total);
         for (let passada = 0; passada < n - 1; passada++) for (let j = 0; j < n - 1 - passada; j++) {
           if (feitos >= mostra) return total;
-          const perto = luz < 0 ? 0 : clamp(1 - Math.abs(feitos - luz) / (total * 0.09));
-          ctx.fillStyle = perto > 0 ? mistura(cor, COR.branco, perto * 0.85) : cor;
-          caixa(ctx, x + j * lado, y + passada * lado, lado - 4, lado - 4, 4); ctx.fill();
+          // a última que entrou acende; depois de cheio, uma onda corre pelas passadas
+          const nova = clamp(1 - (mostra - feitos) / (total * 0.08)), onda = mostra >= total ? 0.5 + 0.5 * Math.sin(t * 3.4 - (passada * 0.9 + j * 0.45)) : 0;
+          ctx.fillStyle = mistura(cor, COR.branco, Math.max(nova * 0.9, onda * 0.5));
+          const pulo = onda * 3;
+          caixa(ctx, x + j * lado, y + passada * lado - pulo, lado - 4, lado - 4, 4); ctx.fill();
           feitos++;
         }
         return total;
@@ -139,12 +144,12 @@ CENAS.bubbleCodigo = {
       texto(ctx, "comparações no pior caso", 1320, 300, { tam: 24, cor: COR.fraco, espaco: 2 });
       triangulo(1320, 340, 8, 28, qCusto + 0.3, COR.ciano);
       texto(ctx, "8 elementos", 1320, 580, { tam: 26, cor: COR.fraco });
-      texto(ctx, String(contando(28, fase(t, qCusto + 0.3, 1.6))), 1320, 640, { tam: 60, peso: 650, cor: COR.ciano });
+      texto(ctx, String(Math.floor(fase(t, qCusto + 0.3, DUR) * 28)), 1320, 640, { tam: 60, peso: 650, cor: COR.ciano });
       const a16 = visivel(t, qDobro - 0.3, Infinity, 0.4);
       ctx.globalAlpha *= a16;
       triangulo(1560, 340, 16, 15.5, qDobro - 0.1, COR.fucsia);
       texto(ctx, "16 elementos", 1560, 610, { tam: 26, cor: COR.fraco });
-      texto(ctx, String(contando(120, fase(t, qDobro - 0.1, 1.6))), 1560, 670, { tam: 60, peso: 650, cor: COR.fucsia });
+      texto(ctx, String(Math.floor(fase(t, qDobro - 0.1, DUR) * 120)), 1560, 670, { tam: 60, peso: 650, cor: COR.fucsia });
       ctx.restore();
       const aF = visivel(t, qCusto + 1.2, Infinity, 0.5);
       texto(ctx, "n (n − 1) / 2", 1320, 800, { tam: 58, peso: 600, mono: true, alfa: aF });

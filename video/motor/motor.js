@@ -23,6 +23,13 @@ function init(linhaDoTempo, dados) {
   return window.ERROS;
 }
 
+/** Carrega o que o quadro do instante t precisa e ainda não está na memória (os quadros da gravação do terminal). */
+async function preparar(t) {
+  t = clamp(t, 0, TL.duracao - 1e-4);
+  const c = TL.cenas.find((x) => t >= x.ini && t < x.ini + x.dur) || TL.cenas[TL.cenas.length - 1];
+  if (CENAS[c.id] && CENAS[c.id].carregar) await CENAS[c.id].carregar(t - c.ini, c);
+}
+
 function render(t) {
   t = clamp(t, 0, TL.duracao - 1e-4);
   const c = TL.cenas.find((x) => t >= x.ini && t < x.ini + x.dur) || TL.cenas[TL.cenas.length - 1];

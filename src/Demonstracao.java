@@ -48,7 +48,7 @@ public class Demonstracao {
             if (soACena == 0 || soACena == n) {
                 cenas[n - 1].run();
                 if (soACena == 0 && n < cenas.length) {
-                    pausa();
+                    pausa("a próxima cena");
                 }
             }
         }
@@ -58,7 +58,12 @@ public class Demonstracao {
 
     private static void cenaPassoAPasso() {
         titulo(1, "O mesmo vetor de 8 valores, passo a passo nos três algoritmos");
-        for (Algoritmo algoritmo : ALGORITMOS) {
+        for (int a = 0; a < ALGORITMOS.length; a++) {
+            Algoritmo algoritmo = ALGORITMOS[a];
+            if (a > 0) {
+                pausa("o próximo algoritmo");
+                diga("");
+            }
             int[] v = VETOR_PEQUENO.clone();
             diga(algoritmo.nome());
             diga("  início             " + Arrays.toString(v));
@@ -67,7 +72,6 @@ public class Demonstracao {
             algoritmo.ordenar().accept(v);
             Ordenacao.observar(null);
             diga("  comparações: " + Ordenacao.comparacoes());
-            diga("");
         }
     }
 
@@ -87,7 +91,8 @@ public class Demonstracao {
                 iguais &= resultado == null || resultado.equals(texto);
                 resultado = texto;
             }
-            diga(String.format("  %-16s %-22s -> %-22s %s", nomes[c], Arrays.toString(casos[c]), resultado,
+            // a linha inteira cabe em 80 colunas, para não quebrar no terminal
+            diga(String.format("  %-15s %-19s -> %-19s %s", nomes[c], Arrays.toString(casos[c]), resultado,
                     iguais ? "os três concordam" : "DIVERGIRAM"));
         }
     }
@@ -131,11 +136,14 @@ public class Demonstracao {
             int[] valores = sortear(n, 42);
             for (Algoritmo algoritmo : ALGORITMOS) {
                 int[] v = valores.clone();
+                // o nome sai antes da medição: no terminal dá para ver quem está demorando
+                Terminal.saida.print(String.format(BRASIL, "  %-16s %,10d ", algoritmo.nome(), n));
+                Terminal.saida.flush();
                 Ordenacao.zerarComparacoes();
                 long inicio = System.nanoTime();
                 algoritmo.ordenar().accept(v);
                 double ms = (System.nanoTime() - inicio) / 1e6;
-                diga(String.format(BRASIL, "  %-16s %,10d %,18d %11.1f ms", algoritmo.nome(), n, Ordenacao.comparacoes(), ms));
+                diga(String.format(BRASIL, "%,18d %11.1f ms", Ordenacao.comparacoes(), ms));
             }
             diga("");
         }
@@ -214,12 +222,13 @@ public class Demonstracao {
         diga("");
     }
 
-    private static void pausa() {
+    private static void pausa(String oQueVem) {
         if (!comPausa) {
+            diga("");
             return;
         }
         diga("");
-        Terminal.saida.print("[Enter para a próxima cena] ");
+        Terminal.saida.print("[Enter para " + oQueVem + "] ");
         if (Terminal.entrada.hasNextLine()) {
             Terminal.entrada.nextLine();
         }

@@ -111,23 +111,24 @@ CENAS.escala = {
       ctx.save(); ctx.globalAlpha *= aGraf;
       texto(ctx, emTempo < 0.5 ? "COMPARAÇÕES" : "TEMPO NESTA MÁQUINA", x0, 300, { tam: 24, peso: 600, cor: COR.fraco, espaco: 3, alfa: Math.abs(emTempo - 0.5) * 2 });
       this.linhas.forEach((l, i) => {
-        const y = 350 + i * 150, k = E.out5(fase(t, entra[i], 1.5)), a = E.out(fase(t, entra[i] - 0.2, 0.4));
+        const y = 370 + i * 170, k = E.out5(fase(t, entra[i], 2.6)), a = E.out(fase(t, entra[i] - 0.2, 0.4));
         const fracComps = l.comps / this.linhas[0].comps, fracMs = l.ms / this.linhas[0].ms, frac = lerp(fracComps, fracMs, emTempo);
         ctx.save(); ctx.globalAlpha *= a;
-        texto(ctx, l.nome, 120, y + 56, { tam: 42, peso: 650, cor: l.cor });
+        texto(ctx, l.nome, 120, y + 64, { tam: 44, peso: 650, cor: l.cor });
         const w = Math.max(5, cheio * frac * k), g = ctx.createLinearGradient(x0, 0, x0 + cheio, 0);
         g.addColorStop(0, comAlfa(l.cor, 0.5)); g.addColorStop(1, l.cor);
-        ctx.shadowColor = comAlfa(l.cor, 0.5); ctx.shadowBlur = 30; ctx.fillStyle = g; caixa(ctx, x0, y + 12, w, 66, 14); ctx.fill(); ctx.shadowBlur = 0;
+        ctx.shadowColor = comAlfa(l.cor, 0.5); ctx.shadowBlur = 30; ctx.fillStyle = g; caixa(ctx, x0, y + 12, w, 76, 16); ctx.fill(); ctx.shadowBlur = 0; ctx.shadowColor = "transparent";
+        if (w > 60) brilhoVarre(ctx, t, x0, y + 12, w, 76, { periodo: 2.4, atraso: i * 0.5, forca: 0.34, raio: 16 });
         const rotulo = emTempo < 0.5 ? milhar(l.comps * k) : tempo(l.ms);
         const dentro = w > 560;
-        texto(ctx, rotulo, dentro ? x0 + w - 24 : x0 + w + 24, y + 62, { tam: 46, peso: 650, alinha: dentro ? "right" : "left", cor: dentro ? "rgba(6,10,22,.92)" : l.cor, alfa: Math.abs(emTempo - 0.5) * 2 });
+        texto(ctx, rotulo, dentro ? x0 + w - 24 : x0 + w + 24, y + 68, { tam: 48, peso: 650, alinha: dentro ? "right" : "left", cor: dentro ? "rgba(6,10,22,.92)" : l.cor, alfa: Math.abs(emTempo - 0.5) * 2 });
         ctx.restore();
       });
       // quantas vezes menos
       const aV = visivel(t, qV, qT - 0.2, 0.4), kV = E.volta(fase(t, qV, 0.6));
       if (aV > 0.01) {
-        texto(ctx, milhar(contando(this.vezes, fase(t, qV, 1.2))) + "×", 1560, 760 + (1 - clamp(kV)) * 30, { tam: 150, peso: 700, cor: COR.ambar, alinha: "center", alfa: aV, brilho: 50, espaco: -4 });
-        texto(ctx, "menos comparações", 1560, 830, { tam: 34, cor: COR.fraco, alinha: "center", alfa: aV });
+        texto(ctx, milhar(contando(this.vezes, fase(t, qV, 1.6))) + "×", 1500, 800 + (1 - clamp(kV)) * 30, { tam: 170, peso: 700, cor: COR.ambar, alinha: "center", alfa: aV, brilho: 40 + 20 * Math.sin(t * 4), espaco: -4 });
+        texto(ctx, "menos comparações que o Bubble Sort", 1500, 874, { tam: 34, cor: COR.fraco, alinha: "center", alfa: aV });
       }
       ctx.restore();
     }
@@ -165,7 +166,9 @@ CENAS.escala = {
     }
     // antes do gráfico: a frase de abertura
     const aF = visivel(t, 0.4, qG - 0.1, 0.4);
-    texto(ctx, "Com 64 valores, a diferença aparece.", W / 2, 500, { tam: 72, peso: 650, alinha: "center", alfa: aF, espaco: -1 });
-    texto(ctx, "Com cem mil, vira um abismo.", W / 2, 610, { tam: 72, peso: 650, alinha: "center", cor: COR.rosa, alfa: visivel(t, 2.4, qG - 0.1, 0.4), espaco: -1 });
+    ctx.save(); aproximar(ctx, fase(t, 0.4, qG), 0.06);
+    texto(ctx, "Com 64 valores, a diferença aparece.", W / 2, 500, { tam: 76, peso: 650, alinha: "center", alfa: aF, espaco: -1 });
+    texto(ctx, "Com cem mil, vira um abismo.", W / 2, 616, { tam: 76, peso: 650, alinha: "center", cor: COR.rosa, alfa: visivel(t, 2.4, qG - 0.1, 0.4), espaco: -1, brilho: 14 + 12 * Math.sin(t * 4) });
+    ctx.restore();
   },
 };

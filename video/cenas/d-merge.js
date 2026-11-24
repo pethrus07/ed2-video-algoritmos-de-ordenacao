@@ -107,16 +107,30 @@ CENAS.mergeIdeia = {
     // os níveis: quantos são e quanto custa cada um
     const aN = visivel(t, qN, Infinity, 0.5);
     if (aN > 0.01) {
-      const x = 1470;
+      const x = 1470, qMi = c.q("milhao"), qVi = c.q("visita");
+      // cada nível passa uma vez por todos: uma luz varre os oito elementos de um nível, depois os do outro
+      for (let L = 1; L <= 3; L++) for (let s = 0; s < n; s++) {
+        const ciclo = ((t - qVi) % 4.4 + 4.4) % 4.4, pos = t < qVi ? -9 : ((ciclo - (L - 1) * 1.3) / 1.1) * n;
+        const perto = clamp(1 - Math.abs(pos - s - 0.5) / 1.5), passou = pos > s + 0.5 && pos < n + 30;
+        ctx.save(); ctx.globalAlpha *= aN * lerp(0.22, 1, Math.max(perto, passou ? 0.6 : 0));
+        ladrilho(ctx, this.x(L, s), this.y(L) - perto * 12, lado, this.v[s], f(this.v[s]), perto > 0.45 ? "ativo" : "pronto");
+        ctx.restore();
+      }
       ctx.save(); ctx.globalAlpha *= aN;
       ctx.strokeStyle = COR.ambar; ctx.lineWidth = 4; ctx.beginPath();
       ctx.moveTo(x - 30, this.y(0) + lado / 2); ctx.lineTo(x, this.y(0) + lado / 2); ctx.lineTo(x, this.y(3) + lado / 2); ctx.lineTo(x - 30, this.y(3) + lado / 2); ctx.stroke();
       for (let L = 0; L < 3; L++) texto(ctx, `divisão ${L + 1}`, x + 22, (this.y(L) + this.y(L + 1)) / 2 + lado / 2 + 8, { tam: 26, cor: COR.fraco });
       ctx.restore();
       texto(ctx, "3 níveis", 1470, 250, { tam: 60, peso: 650, cor: COR.ambar, alfa: aN });
-      const a2 = visivel(t, qN + 2.6, Infinity, 0.5);
-      texto(ctx, "1.000.000 de elementos", 1470, 880, { tam: 28, cor: COR.fraco, alfa: a2 });
-      texto(ctx, "20 níveis", 1470, 940, { tam: 54, peso: 650, cor: COR.ambar, alfa: a2 });
+      // de 8 a um milhão: a lista dobra de tamanho e ganha um nível só de cada vez
+      const a2 = visivel(t, qMi, Infinity, 0.5), niveis = 3 + Math.round(17 * E.io(fase(t, qMi + 0.15, 2.4)));
+      texto(ctx, milhar(2 ** niveis) + " elementos", 1470, 880, { tam: 30, cor: COR.fraco, alfa: a2 });
+      texto(ctx, niveis + " níveis", 1470, 946, { tam: 58, peso: 650, cor: COR.ambar, alfa: a2 });
+      ctx.save(); ctx.globalAlpha *= a2;
+      for (let i = 0; i < niveis; i++) { ctx.fillStyle = comAlfa(COR.ambar, 0.3 + 0.65 * (i / 19)); caixa(ctx, 1786, 944 - i * 9.5, 44, 6.5, 3); ctx.fill(); }
+      ctx.restore();
+      const aVi = visivel(t, qVi, Infinity, 0.4);
+      texto(ctx, "em cada nível: 8 visitas", 1470, 300, { tam: 28, cor: COR.fraco, alfa: aVi });
     }
     contador(ctx, 120, 940, dividindo ? 0 : foto.comps, "comparações", { alfa: visivel(t, c.q("intercala") + 1.5, qN - 0.2, 0.4), tam: 56 });
     legendaPorTempo(ctx, t, [
@@ -140,7 +154,7 @@ CENAS.mergeCodigo = {
     this.linhasA = D.codigo.mergeSort.split("\n");
     this.focosA = resolverFocos("mergeSort", this.linhasA, [
       { t: 0 },
-      { t: 0.9, de: "private static void mergeSort", cor: COR.ambar },
+      { t: 0.9, de: "private static void mergeSort", ate: "int inicio, int fim) {", cor: COR.ambar },
       { t: c.q("base"), de: "if (inicio >= fim) {", ate: "}", cor: COR.verde },
       { t: c.q("meio"), de: "int meio" },
       { t: c.q("chamadas"), de: "mergeSort(v, aux, inicio, meio);", ate: "mergeSort(v, aux, meio + 1, fim);", cor: COR.ambar },
@@ -170,7 +184,7 @@ CENAS.mergeCodigo = {
       { t: c.q("laco"), de: "while (i <= meio && j <= fim) {", ate: "aux[k++] = v[i++];" },
       { t: c.q("resto"), de: "while (i <= meio) {", ate: "aux[k++] = v[j++];", cor: COR.ambar },
       { t: c.q("copia"), de: "for (k = inicio; k <= fim; k++) {", ate: "v[k] = aux[k];", cor: COR.verde },
-      { t: c.q("custo") },
+      { t: c.q("custo"), manter: true },
     ]);
     const v = D.vetor8, meio = v.length / 2;
     this.esq = v.slice(0, meio).sort((a, b) => a - b); this.dir = v.slice(meio).sort((a, b) => a - b);
@@ -213,7 +227,7 @@ CENAS.mergeCodigo = {
 
   parteA(ctx, t, c, a) {
     const relA = this.relogioA(t), { k, p } = relA, ev = relA.parado ? null : this.evA[k], foto = this.antesA[Math.min(k, this.antesA.length - 1)];
-    painelCodigo(ctx, t, 100, 250, 1150, 500, "Ordenacao.java", this.linhasA, this.focosA, { alfa: a, execucao: ev && t > c.q("base") - 1.0 ? this.linhaA[ev.tipo] : -1 });
+    painelCodigo(ctx, t, 100, 236, 1150, 660, "Ordenacao.java", this.linhasA, this.focosA, { alfa: a, execucao: ev && t > c.q("base") - 1.0 ? this.linhaA[ev.tipo] : -1 });
     ctx.save(); ctx.globalAlpha *= a;
     texto(ctx, "chamadas para 8 elementos", 1300, 300, { tam: 24, cor: COR.fraco, espaco: 2 });
     const n = 8, largura0 = 520, x0 = 1290;
@@ -244,7 +258,7 @@ CENAS.mergeCodigo = {
     texto(ctx, oque, 1300, 830, { tam: 30, mono: true, cor: !ev ? COR.fraco : ev.tipo === "chama" ? COR.ambar : ev.tipo === "base" ? COR.verde : COR.fucsia });
     contador(ctx, 1300, 930, foto.pilha.length, "chamadas na pilha agora", { tam: 52, cor: COR.ambar });
     ctx.restore();
-    texto(ctx, "posições do vetor: de 0 a 7", 100, 800, { tam: 24, cor: COR.apagado, alfa: a });
+    texto(ctx, "os números da árvore são posições do vetor: de 0 a 7", 100, 944, { tam: 24, cor: COR.apagado, alfa: a });
   },
 
   parteB(ctx, t, c, a) {
@@ -264,8 +278,11 @@ CENAS.mergeCodigo = {
       if (ev && ev.tipo === "cmp" && (s === ev.a || s === ev.b)) tipoCima = "ativo";
       if (ev && ev.tipo === "leva" && s === ev.origem) cima = null;
       ladrilho(ctx, x(s), yCima, lado, null, 0, "vago");
-      ladrilho(ctx, x(s), yBaixo, lado, null, 0, "vago");
-      const onda = k >= this.evB.length ? Math.sin(t * 3 - s * 0.6) * 7 : 0; // depois de pronto, uma onda passa pelo vetor
+      // o vetor auxiliar é montado casa por casa, quando a fala o apresenta
+      const kAux = E.volta(fase(t, c.q("intercalar") + 1.3 + s * 0.16, 0.4));
+      ladrilho(ctx, x(s), yBaixo + (1 - clamp(kAux)) * 26, lado, null, 0, "vago", { alfa: clamp(kAux) });
+      // antes de rodar e depois de pronto, uma onda passa pelo vetor
+      const onda = k >= this.evB.length || !rodando ? Math.sin(t * 3 - s * 0.6) * 7 : 0;
       if (cima != null) ladrilho(ctx, x(s), yCima - onda, lado, cima, f(cima), tipoCima);
       if (baixo != null && !copiando) ladrilho(ctx, x(s), yBaixo, lado, baixo, f(baixo), "pronto");
       if (copiando && baixo != null) { const q = E.io(fase(p, s * 0.07, 0.45)); ladrilho(ctx, x(s), lerp(yBaixo, yCima, q), lado, baixo, f(baixo), q > 0 && q < 1 ? "ativo" : "pronto"); }

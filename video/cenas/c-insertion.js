@@ -88,7 +88,18 @@ CENAS.insertionIdeia = {
     const qQ = c.q("quase"), geo = { tipo: "cartas", x: 262, w: 1396, y: 520, alto: 214, erguer: 196, selo: true, faixa: true };
     const a1 = visivel(t, 0.5, qQ + 0.2, 0.5), a2 = visivel(t, qQ + 0.4, Infinity, 0.5);
     let estado = null, segunda = false;
-    if (a1 > 0.01) { ctx.save(); ctx.globalAlpha *= a1; estado = desenharInsertion(ctx, this.traco, this.v, this.relogio(t), geo); ctx.restore(); }
+    const tMesa = 1.3, durMesa = clamp(c.q("cartas") - tMesa - 0.3, 1.2, 3.2), naMesa = t < tMesa + durMesa;
+    if (naMesa) {
+      const n = this.v.length, passo = geo.w / n, lw = passo - 22, vmax = Math.max(...this.v);
+      for (let slot = 0; slot < n; slot++) {
+        const k = E.out5(fase(t, tMesa + (slot / n) * durMesa * 0.75, durMesa * 0.3)), x = geo.x + slot * passo + (passo - lw) / 2;
+        if (k <= 0) continue;
+        ctx.save(); ctx.globalAlpha *= a1 * clamp(k * 3);
+        ctx.translate(lerp(W + 200, x + lw / 2, k), geo.y + geo.alto / 2 - Math.sin(k * Math.PI) * 150); ctx.rotate((1 - k) * 0.9);
+        carta(ctx, -lw / 2, -geo.alto / 2, lw, geo.alto, this.v[slot], this.v[slot] / vmax, { apagada: slot >= 1 ? 0.42 * clamp((k - 0.8) * 5) : 0 });
+        ctx.restore();
+      }
+    } else if (a1 > 0.01) { ctx.save(); ctx.globalAlpha *= a1; estado = desenharInsertion(ctx, this.traco, this.v, this.relogio(t), geo); ctx.restore(); }
     if (a2 > 0.01) { ctx.save(); ctx.globalAlpha *= a2; estado = desenharInsertion(ctx, this.traco2, this.v2, this.relogio2(t), geo); ctx.restore(); segunda = true; }
     if (estado) {
       const a = visivel(t, c.q("cartas"), Infinity, 0.5);
@@ -118,7 +129,7 @@ CENAS.insertionCodigo = {
       { t: c.q("while"), de: "while (j >= 0 && maior(v[j], chave))" },
       { t: c.q("desloca"), de: "v[j + 1] = v[j];", ate: "j--;", cor: COR.ambar },
       { t: c.q("encaixa"), de: "v[j + 1] = chave;", cor: COR.verde },
-      { t: c.q("custo") },
+      { t: c.q("custo"), de: "while (j >= 0 && maior(v[j], chave))", ate: "j--;", cor: COR.rosa, doInicio: true },
     ]);
     const l = this.linhas;
     this.linhaDoEvento = { chave: linhaDe(l, "int chave"), while: linhaDe(l, "while ("), desloca: linhaDe(l, "v[j + 1] = v[j];"), solta: linhaDe(l, "v[j + 1] = chave;") };
@@ -130,7 +141,7 @@ CENAS.insertionCodigo = {
     cabecalho(ctx, t, "Insertion Sort", "No código: a chave e a vaga", COR.fucsia);
     const qC = c.q("custo"), qM = c.q("melhor"), rel = this.relogio(t), ev = rel.parado ? null : this.traco.eventos[rel.k];
     const aViz = visivel(t, 0.5, qC - 0.2, 0.5);
-    painelCodigo(ctx, t, 100, 236, 1170, 620, "Ordenacao.java", this.linhas, this.focos, { execucao: aViz > 0.5 && ev ? this.linhaDoEvento[ev.linha] : -1 });
+    painelCodigo(ctx, t, 100, 226, 1190, 770, "Ordenacao.java", this.linhas, this.focos, { execucao: aViz > 0.5 && ev ? this.linhaDoEvento[ev.linha] : -1 });
     if (aViz > 0.01) {
       ctx.save(); ctx.globalAlpha *= aViz;
       texto(ctx, "rodando agora", 1330, 300, { tam: 24, cor: COR.fraco, espaco: 2 });
@@ -140,19 +151,24 @@ CENAS.insertionCodigo = {
       ctx.restore();
     }
     // pior e melhor caso, com os números que o programa mediu para 1.000 valores
-    const escada = (x, y, subindo, cor, a) => {
-      for (let b = 0; b < 10; b++) { const h = 22 + (subindo ? b : 9 - b) * 15 + Math.sin(t * 3.2 - b * 0.7) * 7; ctx.fillStyle = comAlfa(cor, a); caixa(ctx, x + b * 26, y - h, 19, h, 5); ctx.fill(); }
+    // dez barrinhas: uma luz passa por elas, uma comparação por vez; na lista invertida cada uma ainda desce até o começo
+    const escada = (x, y, subindo, cor, a, t0) => {
+      const vez = ((t - t0) * 5) % 10;
+      for (let b = 0; b < 10; b++) {
+        const perto = clamp(1 - Math.abs(vez - b - 0.5) / 1.3), h = 22 + (subindo ? b : 9 - b) * 15 + perto * 16;
+        ctx.fillStyle = mistura(cor, COR.branco, perto * 0.75, a); caixa(ctx, x + b * 26 - (subindo ? 0 : perto * 6), y - h, 19, h, 5); ctx.fill();
+      }
     };
     const aP = visivel(t, qC, Infinity, 0.5), aM = visivel(t, qM, Infinity, 0.5);
     if (aP > 0.01) {
       texto(ctx, "1.000 valores", 1320, 300, { tam: 24, cor: COR.fraco, espaco: 2, alfa: aP });
-      escada(1320, 480, false, COR.rosa, aP);
+      escada(1320, 480, false, COR.rosa, aP, qC);
       texto(ctx, "lista invertida", 1620, 400, { tam: 30, cor: COR.fraco, alfa: aP });
-      texto(ctx, milhar(contando(this.casos.invertido, fase(t, qC + 0.2, 1.5))), 1320, 570, { tam: 76, peso: 650, cor: COR.rosa, alfa: aP });
+      texto(ctx, milhar(contando(this.casos.invertido, fase(t, qC + 0.2, 2.6))), 1320, 570, { tam: 76, peso: 650, cor: COR.rosa, alfa: aP });
       texto(ctx, "comparações · n(n − 1)/2", 1320, 614, { tam: 26, cor: COR.fraco, alfa: aP });
-      escada(1320, 800, true, COR.verde, aM);
+      escada(1320, 800, true, COR.verde, aM, qM);
       texto(ctx, "lista já ordenada", 1620, 720, { tam: 30, cor: COR.fraco, alfa: aM });
-      texto(ctx, milhar(contando(this.casos.ordenado, fase(t, qM + 0.2, 1.2))), 1320, 890, { tam: 76, peso: 650, cor: COR.verde, alfa: aM });
+      texto(ctx, milhar(contando(this.casos.ordenado, fase(t, qM + 0.2, 2.0))), 1320, 890, { tam: 76, peso: 650, cor: COR.verde, alfa: aM });
       texto(ctx, "comparações · n − 1", 1320, 934, { tam: 26, cor: COR.fraco, alfa: aM });
     }
   },

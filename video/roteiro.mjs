@@ -15,10 +15,14 @@ export const REPOSITORIO = "github.com/pethrus07/ed2-video-algoritmos-de-ordenac
 export const CENAS = [
   {
     id: "abertura", capitulo: "Abertura",
-    fala: `Toda vez que você pede uma lista de preços do menor para o maior, ou olha um ranking, tem um algoritmo de ordenação trabalhando.
+    fala: `Toda vez que você pede uma lista de preços do menor para o maior, {{ranking}} ou olha um ranking, {{algoritmo}} tem um algoritmo de ordenação trabalhando.
 {{titulo}} Eu sou o Izaias Terto e, junto com o Pedro Oliveira, apresento este trabalho de Estruturas de Dados 2, da Unipê, com o professor Ed.
 {{tres}} Vamos ver três algoritmos: o Bubble Sort, o Insertion Sort e o Merge Sort.
-{{pergunta}} E descobrir por que um deles chega a ser milhares de vezes mais rápido que os outros.`,
+{{pergunta}} E descobrir por que um deles termina em milésimos de segundo o que outro leva segundos para fazer.`,
+    confere: (d) => [
+      [d.escala[100000].bubble.ms >= 2000, "a abertura diz que um deles leva segundos"],
+      [d.escala[100000].merge.ms < 200, "a abertura diz que outro termina em milésimos de segundo"],
+    ],
   },
   {
     id: "porque", capitulo: "Por que ordenar",
@@ -73,7 +77,7 @@ export const CENAS = [
 {{um}} E uma lista de um elemento já está ordenada.
 {{intercala}} Agora vem a volta. Duas listas ordenadas podem ser juntadas em uma só de um jeito muito barato: basta comparar o primeiro de cada uma e levar o menor.
 {{sobe}} Juntando de dois em dois, de baixo para cima, a lista inteira volta ordenada.
-{{niveis}} Repare na forma. Para oito elementos, são só três níveis de divisão. Para um milhão, são vinte. E em cada nível, cada elemento é visitado uma vez.`,
+{{niveis}} Repare na forma. Para oito elementos, são só três níveis de divisão. {{milhao}} Para um milhão, são vinte. {{visita}} E em cada nível, cada elemento é visitado uma vez.`,
   },
   {
     id: "mergeCodigo", capitulo: "Merge Sort no código",
@@ -126,13 +130,54 @@ export const CENAS = [
   },
   {
     id: "terminal", capitulo: "O programa rodando",
-    fala: `Agora o programa rodando.
-{{cmd}} Este é o código Java do nosso repositório, executado no terminal.
-{{c1}} Primeiro ele ordena um vetor de oito valores e mostra cada etapa dos três algoritmos.
-{{c2}} Depois vêm os casos de borda: vetor vazio, de um elemento, com repetidos, com negativos. Os três algoritmos têm de concordar.
+    fala: `Agora, na prática. Esta é a gravação do nosso terminal.
+{{compila}} Primeiro compilamos o código com o javac.
+{{roda}} E rodamos a demonstração. Ela começa com o mesmo vetor de oito valores dos exemplos. O Bubble Sort mostra o vetor ao fim de cada passada: foram cinco passadas e 25 comparações.
+{{ins}} O Insertion Sort mostra cada encaixe, e resolve com 18.
+{{mer}} E o Merge Sort mostra cada intercalação, com 17 comparações.
+{{c2}} Depois vêm os casos de borda: vetor vazio, de um elemento, com repetidos, com negativos. Os três algoritmos têm de devolver a mesma resposta.
 {{c3}} Aqui, o melhor e o pior caso com mil valores. Com a lista já ordenada, o Bubble e o Insertion fazem só 999 comparações. Com a lista invertida, quase quinhentas mil.
-{{c4}} E a medição em escala, de onde saíram os números que você acabou de ver.
-{{testes}} Por fim, os testes. Cada algoritmo é comparado com a ordenação do próprio Java em dois mil vetores sorteados.`,
+{{c4}} Por último, a medição em escala. Com mil e com dez mil valores, a resposta sai na hora. Com cem mil, repare: o programa parou na linha do Bubble Sort. Neste momento ele está fazendo quase cinco bilhões de comparações. É o n ao quadrado acontecendo de verdade.
+{{pronto}} Pronto. O Insertion Sort vem logo depois, e o Merge Sort termina tão rápido que nem dá para ver.
+{{testes}} Para fechar, os testes automáticos. Cada algoritmo é comparado com a ordenação do próprio Java em dois mil vetores sorteados. Quarenta e duas verificações, nenhuma falha.`,
+    confere: (d) => [
+      [d.comparacoes8.bubble === 25 && d.passadas8 === 5, "a fala diz cinco passadas e 25 comparações do Bubble Sort no vetor de oito"],
+      [d.comparacoes8.insertion === 18, "a fala diz 18 comparações do Insertion Sort no vetor de oito"],
+      [d.comparacoes8.merge === 17, "a fala diz 17 comparações do Merge Sort no vetor de oito"],
+      [d.casos.bubble.ordenado === 999 && d.casos.insertion.ordenado === 999, "a fala diz 999 comparações com a lista já ordenada"],
+      [d.casos.bubble.invertido > 490000 && d.casos.bubble.invertido < 500000, "a fala diz quase quinhentas mil com a lista invertida"],
+      [d.escala[100000].bubble.comparacoes > 4.9e9 && d.escala[100000].bubble.comparacoes < 5e9, "a fala diz quase cinco bilhões de comparações"],
+      [d.escala[100000].merge.ms < 200, "a fala diz que o Merge Sort termina tão rápido que nem dá para ver"],
+      [d.testes === "42 verificações, 0 falhas", "a fala diz quarenta e duas verificações, nenhuma falha"],
+    ],
+    /**
+     * Como a fala se encaixa na gravação do terminal. Cada marca com `blocos` dispara um trecho da gravação,
+     * que toca na velocidade real; cada marca com `esperas` só começa a ser dita depois que aquele instante
+     * da gravação apareceu. Entre um trecho e outro a imagem fica parada no último quadro, como quem espera
+     * para apertar Enter.
+     */
+    gravacao: (g) => {
+      const em = (nome, filtro = () => true, ordem = 0) => {
+        const e = g.eventos.filter((x) => x.nome === nome && filtro(x))[ordem];
+        if (!e) throw new Error(`a gravação do terminal não tem o evento "${nome}" (${ordem})`);
+        return e.t;
+      };
+      const pausa = (n) => em("pausa", (e) => e.n === n), segue = (n) => em("segue", (e) => e.n === n);
+      const javac = (e) => e.comando.startsWith("javac"), demo = (e) => e.comando.endsWith("Demonstracao"), testes = (e) => e.comando.endsWith("Testes");
+      return {
+        blocos: {
+          compila: [em("digita", javac) - 0.3, em("terminou", javac) + 0.3],
+          roda: [em("digita", demo) - 0.3, pausa(1) + 0.3],
+          ins: [segue(1) - 0.05, pausa(2) + 0.3],
+          mer: [segue(2) - 0.05, pausa(3) + 0.3],
+          c2: [segue(3) - 0.05, pausa(4) + 0.3],
+          c3: [segue(4) - 0.05, pausa(5) + 0.3],
+          c4: [segue(5) - 0.05, em("terminou", demo) + 0.3],
+          testes: [em("digita", testes) - 0.3, em("fim") + 0.5],
+        },
+        esperas: { pronto: em("mediu", (e) => e.algoritmo === "bubble" && e.n === 100000) },
+      };
+    },
   },
   {
     id: "resumo", capitulo: "Comparação",
