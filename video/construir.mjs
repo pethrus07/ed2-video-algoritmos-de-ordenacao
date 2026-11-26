@@ -4,7 +4,7 @@
 //   node video/construir.mjs dados      compila o Java e guarda os números, o código e os dados da gravação
 //   node video/construir.mjs falas      escreve o texto de cada cena para o narrador (video/NARRACAO.md)
 //   node video/construir.mjs audio      prepara o áudio de cada cena (o real, se existir; senão uma prévia sintética)
-//   node video/construir.mjs importar <pasta>  recebe os áudios do narrador e descobre a cena de cada um
+//   node video/construir.mjs importar <pasta ou arquivos>  recebe os áudios do narrador (um só ou vários) e separa por cena
 //   node video/construir.mjs palavras   transcreve cada áudio com o instante de cada palavra (sincronia)
 //   node video/construir.mjs tempo      monta a linha do tempo a partir da duração de cada áudio
 //   node video/construir.mjs amostra 12.5,40   grava quadros desses instantes em trabalho/amostras/
@@ -262,22 +262,113 @@ function etapaAudio() {
     if (!fs.existsSync(py)) throw new Error("sem voz local para a prévia (esperava " + py + "). Grave os áudios em video/narracao/ ou defina PYTHON_TTS.");
     process.stdout.write(rodar(py, [path.join(AQUI, "ferramentas", "voz_previa.py"), path.join(TRAB, "falas"), path.join(TRAB, "previa")], { env: { ...process.env, HF_HUB_OFFLINE: "1", PYTHONIOENCODING: "utf-8" } }));
   }
+  const pontas = "silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.05,areverse,silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.12,areverse";
+  // A narração real é editada antes de entrar: o bruto é transcrito com o instante de cada palavra para
+  // achar e cortar as frases repetidas (quem erra para, respira e repete a frase inteira).
+  const brutos = path.join(TRAB, "bruto"), relatorio = [];
+  if (real.some(Boolean)) {
+    fs.rmSync(brutos, { recursive: true, force: true }); fs.mkdirSync(brutos, { recursive: true });
+    CENAS.forEach((c, i) => { if (real[i]) rodar("ffmpeg", ["-y", "-v", "error", "-i", path.join(AQUI, "narracao", real[i]), "-ar", "48000", "-ac", "1", path.join(brutos, `${num(i)}-${c.id}.wav`)]); });
+    rodar(process.env.PYTHON_WHISPER || venv("faster-whisper"), [path.join(AQUI, "ferramentas", "palavras.py"), brutos, brutos], { env: { ...process.env, PYTHONIOENCODING: "utf-8" } });
+  }
   CENAS.forEach((c, i) => {
-    const fonte = real[i] ? path.join(AQUI, "narracao", real[i]) : path.join(TRAB, "previa", `${num(i)}-${c.id}.wav`);
-    // 48 kHz, mono, sem o silêncio das pontas (cada cena já tem a própria folga)
-    rodar("ffmpeg", ["-y", "-v", "error", "-i", fonte, "-af",
-      "highpass=f=70,silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.05,areverse,silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.12,areverse",
-      "-ar", "48000", "-ac", "1", path.join(TRAB, "audio", `${num(i)}-${c.id}.wav`)]);
+    const saida = path.join(TRAB, "audio", `${num(i)}-${c.id}.wav`);
+    if (!real[i]) {
+      // prévia: 48 kHz, mono, sem o silêncio das pontas (cada cena já tem a própria folga)
+      rodar("ffmpeg", ["-y", "-v", "error", "-i", path.join(TRAB, "previa", `${num(i)}-${c.id}.wav`), "-af", "highpass=f=70," + pontas, "-ar", "48000", "-ac", "1", saida]);
+      return;
+    }
+    const bruto = path.join(brutos, `${num(i)}-${c.id}.wav`), cortes = repeticoes(c, JSON.parse(fs.readFileSync(bruto.replace(/\.wav$/, ".json"), "utf8")));
+    const dur = duracaoDe(bruto), manter = []; let cursor = 0;
+    cortes.forEach((k) => { k.ate = Math.min(k.ate, dur); });
+    for (const k of cortes) { if (k.de > cursor + 0.05) manter.push([cursor, k.de]); cursor = Math.max(cursor, k.ate); }
+    if (dur > cursor + 0.05) manter.push([cursor, dur]);
+    const pedacos = manter.map(([a, b], n) => `[0:a]atrim=start=${a.toFixed(3)}:end=${b.toFixed(3)},asetpts=PTS-STARTPTS,afade=t=in:d=0.012,afade=t=out:st=${Math.max(0, b - a - 0.015).toFixed(3)}:d=0.015[p${n}]`);
+    const junta = manter.length > 1 ? `${manter.map((_, n) => `[p${n}]`).join("")}concat=n=${manter.length}:v=0:a=1[j]` : "[p0]anull[j]";
+    // limpeza de gravação de celular: tira o ronco grave, baixa o chiado de fundo e apara as pontas
+    const limpo = saida.replace(/\.wav$/, "-limpo.wav");
+    rodar("ffmpeg", ["-y", "-v", "error", "-i", bruto, "-filter_complex", `${pedacos.join(";")};${junta};[j]highpass=f=80,afftdn=nr=8:nf=-45,${pontas}[o]`, "-map", "[o]", "-ar", "48000", "-ac", "1", limpo]);
+    // cada trecho foi gravado a uma distância diferente do celular: todos saem no mesmo volume, com um ganho só
+    const medida = spawnSync("ffmpeg", ["-hide_banner", "-i", limpo, "-af", "loudnorm=print_format=json", "-f", "null", "-"], { encoding: "utf8" }).stderr;
+    const abre = medida.lastIndexOf("{"), m = JSON.parse(medida.slice(abre, medida.indexOf("}", abre) + 1));
+    const ganho = clampNum(-19 - Number(m.input_i), -12, 24);
+    rodar("ffmpeg", ["-y", "-v", "error", "-i", limpo, "-af", `volume=${ganho.toFixed(2)}dB,alimiter=limit=0.84:attack=3:release=60:level=false`, "-ar", "48000", "-ac", "1", saida]); // o limitador segura os picos; o ganho não cede por causa deles
+    fs.rmSync(limpo);
+    relatorio.push({ cena: `${num(i)} ${c.capitulo}`, duracaoBruta: +dur.toFixed(1), cortes: cortes.map((k) => ({ de: +k.de.toFixed(2), ate: +k.ate.toFixed(2), texto: k.texto })), volumeBruto: Number(m.input_i), ganho: +ganho.toFixed(1) });
+    for (const k of cortes) console.log(`  ${num(i)} ${c.capitulo}: cortei ${(k.ate - k.de).toFixed(1)} s de fala repetida ("${k.texto.slice(0, 70)}")`);
   });
   gravar("origem-do-audio.json", real.map((r) => (r ? "real" : "prévia")));
-  console.log(`áudio: ${real.filter(Boolean).length} cenas com narração real, ${real.filter((r) => !r).length} com prévia sintética`);
+  gravar("edicao-do-audio.json", relatorio);
+  const nCortes = relatorio.reduce((s, r) => s + r.cortes.length, 0);
+  console.log(`áudio: ${real.filter(Boolean).length} cenas com narração real (${nCortes} repetições cortadas), ${real.filter((r) => !r).length} com prévia sintética`);
 }
+const clampNum = (x, a, b) => Math.min(b, Math.max(a, x));
+
+/** Palavras do texto de uma cena, do jeito que se comparam com a transcrição: sem acento, sem pontuação. */
+const palavrasDoTexto = (c) => falaLimpa(c.fala).split(" ").map((w) => semAcento(w).replace(/ /g, "")).filter(Boolean);
+
+/**
+ * Segue a transcrição de uma gravação ao lado do texto da cena e acha o que precisa sair:
+ *  - retomadas: o narrador erra, para e repete a frase (quatro palavras seguidas voltam a um ponto
+ *    anterior do texto); sai a tentativa anterior, daquele ponto em diante;
+ *  - conversa antes da primeira palavra do texto ou depois da última ("testando", "pronto, é isso").
+ * Devolve os cortes e quanto do texto foi dito (cobertura, de 0 a 1).
+ */
+function seguirRoteiro(c, palavras) {
+  const S = palavrasDoTexto(c), T = palavras.map((w) => semAcento(w.texto).replace(/ /g, "")), mapa = new Array(T.length).fill(-1), cortes = [];
+  const bate = (i, j, n) => { for (let x = 0; x < n; x++) { if (i + x >= T.length) return x >= 2; if (j + x >= S.length || T[i + x] !== S[j + x]) return false; } return true; };
+  let p = 0;
+  for (let i = 0; i < T.length; i++) {
+    if (!T[i]) continue;
+    let j = -1;
+    // segue adiante no texto (tolerando palavra que a transcrição escreveu de outro jeito)
+    for (let d = 0; d <= 4 && j < 0; d++) if (p + d < S.length && T[i] === S[p + d] && (d === 0 || bate(i, p + d, 2))) j = p + d;
+    // a fala pulou um pedaço do texto: segue de onde voltou a bater
+    for (let d = 5; d <= 40 && j < 0; d++) if (p + d < S.length && bate(i, p + d, 3)) j = p + d;
+    if (j < 0) {
+      for (let b = p - 2; b >= Math.max(0, p - 45) && j < 0; b--) if (bate(i, b, 4)) j = b;
+      if (j >= 0) {
+        // a tentativa descartada: da primeira palavra já dita desse ponto do texto em diante, até a retomada
+        let antes = -1; for (let x = 0; x < i; x++) if (mapa[x] >= 0 && mapa[x] < j) antes = x;
+        let primeira = -1; for (let x = antes + 1; x < i && primeira < 0; x++) if (mapa[x] >= j) primeira = x;
+        if (primeira >= 0) {
+          const de = primeira > 0 ? (palavras[primeira - 1].fim + palavras[primeira].ini) / 2 : 0, ate = Math.max(de, palavras[i].ini - 0.06);
+          if (ate - de > 0.25 && ate - de < 60) { cortes.push({ de, ate, texto: palavras.slice(primeira, i).map((w) => w.texto).join(" ") }); for (let x = primeira; x < i; x++) mapa[x] = -2; }
+        }
+      }
+    }
+    if (j >= 0) { mapa[i] = j; p = j + 1; }
+  }
+  const ditas = mapa.map((j, i) => (j >= 0 ? i : -1)).filter((i) => i >= 0);
+  if (ditas.length) {
+    const a = ditas[0], z = ditas[ditas.length - 1];
+    if (a >= 4 && mapa[a] <= 3) cortes.push({ de: 0, ate: Math.max(0, palavras[a].ini - 0.08), texto: palavras.slice(0, a).map((w) => w.texto).join(" ") });
+    if (T.length - 1 - z >= 4 && mapa[z] >= S.length - 4) cortes.push({ de: palavras[z].fim + 0.2, ate: palavras[T.length - 1].fim + 600, texto: palavras.slice(z + 1).map((w) => w.texto).join(" ") });
+  }
+  // retomadas encaixadas viram um corte só
+  cortes.sort((x, y) => x.de - y.de);
+  const juntos = cortes.reduce((lista, k) => { const u = lista[lista.length - 1]; if (u && k.de <= u.ate) { u.ate = Math.max(u.ate, k.ate); u.texto += " … " + k.texto; } else lista.push({ ...k }); return lista; }, []);
+  return { cortes: juntos, cobertura: new Set(mapa.filter((j) => j >= 0)).size / S.length };
+}
+const repeticoes = (c, palavras) => seguirRoteiro(c, palavras).cortes;
 
 /** Transcreve cada áudio com o instante de cada palavra, para a animação acompanhar a fala. */
 function etapaPalavras() {
   const py = process.env.PYTHON_WHISPER || venv("faster-whisper");
   if (!fs.existsSync(py)) { console.log("palavras: sem faster-whisper; as marcas ficam pela posição no texto"); return; }
   process.stdout.write(rodar(py, [path.join(AQUI, "ferramentas", "palavras.py"), path.join(TRAB, "audio"), path.join(TRAB, "palavras")], { env: { ...process.env, PYTHONIOENCODING: "utf-8" } }));
+  // conferência da narração real, já editada: quanto do texto de cada cena está na voz, e se sobrou retomada
+  const origem = fs.existsSync(path.join(TRAB, "origem-do-audio.json")) ? ler("origem-do-audio.json") : [];
+  const conferencia = CENAS.map((c, i) => {
+    if (origem[i] !== "real") return null;
+    const r = seguirRoteiro(c, JSON.parse(fs.readFileSync(path.join(TRAB, "palavras", `${num(i)}-${c.id}.json`), "utf8")));
+    return { cena: `${num(i)} ${c.capitulo}`, cobertura: +(100 * r.cobertura).toFixed(1), sobras: r.cortes.map((k) => k.texto.slice(0, 80)) };
+  }).filter(Boolean);
+  if (!conferencia.length) return;
+  gravar("conferencia-da-fala.json", conferencia);
+  const fracas = conferencia.filter((x) => x.cobertura < 72 || x.sobras.length); // leitura perfeita dá de 80% a 95%: a transcrição escreve números e "n²" de outro jeito
+  console.log(`fala: ${conferencia.length} cenas com voz real; texto dito, da pior para a melhor: ${conferencia.slice().sort((a, b) => a.cobertura - b.cobertura).slice(0, 4).map((x) => `${x.cena.slice(0, 2)} ${x.cobertura}%`).join(", ")}`);
+  for (const x of fracas) console.log(`  ATENÇÃO ${x.cena}: ${x.cobertura}% do texto na voz${x.sobras.length ? `; ainda parece haver repetição ("${x.sobras[0]}")` : ""}`);
 }
 
 // ------------------------------------------------------------------ tempo
@@ -514,37 +605,46 @@ async function etapaRender() {
 // ------------------------------------------------------------------ importar a narração
 
 /**
- * Recebe uma pasta com os áudios do narrador (nomes quaisquer, como os do WhatsApp), descobre pelo
- * que foi dito a qual cena cada um pertence e copia para video/narracao/ com o número da cena.
- * Se houver dois áudios da mesma cena, fica o mais novo.
+ * Recebe os áudios do narrador (pastas ou arquivos, com o nome que vier do WhatsApp) e monta um áudio por
+ * cena em video/narracao/. Vale um áudio por cena, um áudio só com a narração inteira ou qualquer divisão:
+ * tudo é transcrito aqui na máquina e alinhado com o texto do roteiro (ferramentas/alinhar.py). Se o mesmo
+ * trecho aparece em dois áudios, fica o mais novo. O que não é do roteiro é ignorado, e a transcrição
+ * temporária é apagada no fim.
  */
-function etapaImportar(pasta) {
-  if (!pasta || !fs.existsSync(pasta)) throw new Error("diga a pasta dos áudios: node video/construir.mjs importar <pasta>");
-  const py = process.env.PYTHON_WHISPER || venv("faster-whisper");
+function etapaImportar(origens) {
+  const ehAudio = /\.(ogg|opus|oga|m4a|mp3|wav|aac|amr|mpeg|mpga|mp4|webm|3gp)$/i;
+  const arquivos = [].concat(origens || []).flatMap((o) => {
+    if (!fs.existsSync(o)) throw new Error("não existe: " + o);
+    return fs.statSync(o).isDirectory() ? fs.readdirSync(o).map((f) => path.join(o, f)).filter((f) => fs.statSync(f).isFile()) : [o];
+  }).filter((f) => ehAudio.test(f)).sort((a, b) => fs.statSync(a).mtimeMs - fs.statSync(b).mtimeMs || a.localeCompare(b));
+  if (!arquivos.length) throw new Error("nenhum áudio encontrado. Uso: node video/construir.mjs importar <pasta ou arquivos>");
+  const py = process.env.PYTHON_WHISPER || venv("faster-whisper"), env = { ...process.env, PYTHONIOENCODING: "utf-8" };
   const tmp = path.join(TRAB, "importar"); fs.rmSync(tmp, { recursive: true, force: true }); fs.mkdirSync(tmp, { recursive: true });
-  const arquivos = fs.readdirSync(pasta).filter((f) => /\.(ogg|opus|m4a|mp3|wav|aac|mp4|webm)$/i.test(f)).sort((a, b) => fs.statSync(path.join(pasta, a)).mtimeMs - fs.statSync(path.join(pasta, b)).mtimeMs);
-  if (!arquivos.length) throw new Error("nenhum áudio encontrado em " + pasta);
-  arquivos.forEach((f, i) => rodar("ffmpeg", ["-y", "-v", "error", "-i", path.join(pasta, f), "-ar", "16000", "-ac", "1", path.join(tmp, `a${String(i).padStart(3, "0")}.wav`)]));
-  rodar(py, [path.join(AQUI, "ferramentas", "palavras.py"), tmp, tmp], { env: { ...process.env, PYTHONIOENCODING: "utf-8" } });
-  const vocabulario = CENAS.map((c) => new Set(semAcento(falaLimpa(c.fala)).split(" ")));
-  const destino = path.join(AQUI, "narracao"); fs.mkdirSync(destino, { recursive: true });
-  const escolhido = {};
-  arquivos.forEach((f, i) => {
-    const ditas = new Set(JSON.parse(fs.readFileSync(path.join(tmp, `a${String(i).padStart(3, "0")}.json`), "utf8")).map((w) => semAcento(w.texto)).filter(Boolean));
-    const notas = vocabulario.map((v) => [...v].filter((w) => ditas.has(w)).length / new Set([...v, ...ditas]).size);
-    const melhor = notas.indexOf(Math.max(...notas));
-    const dur = duracaoDe(path.join(pasta, f));
-    if (notas[melhor] < 0.45) { console.log(`  ?? ${f} (${dur.toFixed(0)} s): não parece nenhum trecho do roteiro (melhor: ${num(melhor)}, ${Math.round(notas[melhor] * 100)}%)`); return; }
-    escolhido[melhor] = { arquivo: f, nota: notas[melhor], dur };
-  });
-  for (const antigo of fs.readdirSync(destino)) if (Object.keys(escolhido).some((i) => antigo.startsWith(num(+i)))) fs.rmSync(path.join(destino, antigo));
-  CENAS.forEach((c, i) => {
-    const e = escolhido[i];
-    if (!e) { console.log(`  -- ${num(i)} ${c.capitulo}: FALTA`); return; }
-    fs.copyFileSync(path.join(pasta, e.arquivo), path.join(destino, `${num(i)}-${c.id}${path.extname(e.arquivo).toLowerCase()}`));
-    console.log(`  ok ${num(i)} ${c.capitulo}: ${e.arquivo} (${e.dur.toFixed(0)} s, ${Math.round(e.nota * 100)}% do texto)`);
-  });
-  console.log(`importar: ${Object.keys(escolhido).length} de ${CENAS.length} cenas com narração real`);
+  const mmss = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+  try {
+    arquivos.forEach((f, i) => rodar("ffmpeg", ["-y", "-v", "error", "-i", f, "-vn", "-ar", "16000", "-ac", "1", path.join(tmp, `a${String(i).padStart(3, "0")}.wav`)]));
+    rodar(py, [path.join(AQUI, "ferramentas", "palavras.py"), tmp, tmp], { env });
+    fs.writeFileSync(path.join(tmp, "roteiro.json"), JSON.stringify(CENAS.map((c) => ({ id: c.id, texto: falaLimpa(c.fala) }))), "utf8");
+    const a = JSON.parse(rodar(py, [path.join(AQUI, "ferramentas", "alinhar.py"), tmp, path.join(tmp, "roteiro.json")], { env }));
+    const destino = path.join(AQUI, "narracao"); fs.mkdirSync(destino, { recursive: true });
+    let prontas = 0;
+    CENAS.forEach((c, k) => {
+      let segs = a.segmentos.filter((s) => s.cena === k).sort((x, y) => x.ordem - y.ordem || x.de - y.de);
+      // regravação: se dois pedaços cobrem o mesmo trecho do texto, fica o mais novo
+      segs = segs.filter((s, n) => !segs.slice(n + 1).some((t) => Math.min(s.s1, t.s1) - Math.max(s.s0, t.s0) + 1 > 0.5 * Math.min(s.s1 - s.s0 + 1, t.s1 - t.s0 + 1)));
+      segs.sort((x, y) => x.s0 - y.s0);
+      const cobertura = Math.min(1, segs.reduce((t, s) => t + s.ancoradas, 0) / a.cenas[k].palavras);
+      if (!segs.length || cobertura < 0.5) { console.log(`  -- ${num(k)} ${c.capitulo}: FALTA${segs.length ? ` (achei só ${Math.round(cobertura * 100)}% do texto)` : ""}`); return; }
+      for (const antigo of fs.readdirSync(destino)) if (antigo.startsWith(num(k))) fs.rmSync(path.join(destino, antigo));
+      const filtro = segs.map((s, n) => `[${n}:a]atrim=start=${s.de.toFixed(3)}${s.ate != null ? `:end=${s.ate.toFixed(3)}` : ""},asetpts=PTS-STARTPTS,aformat=sample_rates=48000:channel_layouts=mono[s${n}]`).join(";") +
+        `;${segs.map((_, n) => `[s${n}]`).join("")}concat=n=${segs.length}:v=0:a=1[o]`;
+      rodar("ffmpeg", ["-y", "-v", "error", ...segs.flatMap((s) => ["-i", arquivos[s.ordem]]), "-filter_complex", filtro, "-map", "[o]", "-ar", "48000", "-ac", "1", path.join(destino, `${num(k)}-${c.id}.wav`)]);
+      prontas++;
+      console.log(`  ok ${num(k)} ${c.capitulo}: ${Math.round(cobertura * 100)}% do texto, de ${segs.map((s) => `${path.basename(arquivos[s.ordem])} [${mmss(s.de)} a ${s.ate != null ? mmss(s.ate) : "fim"}]`).join(" + ")}`);
+    });
+    for (const x of a.arquivos.filter((x) => !x.cenas.length)) console.log(`  ?? ${path.basename(arquivos[x.ordem])}: não parece nenhum trecho do roteiro (ignorado)`);
+    console.log(`importar: ${prontas} de ${CENAS.length} cenas com narração real, a partir de ${arquivos.length} arquivo(s)`);
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 }
 
 // ------------------------------------------------------------------ legendas
@@ -603,7 +703,7 @@ try {
   else if (etapa === "gravar") await etapaGravar();
   else if (etapa === "limpar-perfil") await limparPerfilTemporario();
   else if (etapa === "processar-gravacao") processarGravacao();
-  else if (etapa === "importar") etapaImportar(process.argv[3]);
+  else if (etapa === "importar") etapaImportar(process.argv.slice(3));
   else if (etapa === "miniatura") await etapaMiniatura();
   else if (etapa === "youtube") etapaYoutube();
   else if (etapa === "tudo") for (const e of ["dados", "falas", "audio", "palavras", "tempo", "trilha", "legendas", "render"]) await etapas[e]();

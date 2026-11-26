@@ -25,7 +25,8 @@ def main():
             continue
         with open(origem, encoding="utf-8") as f:
             texto = f.read().strip()
-        pedacos = [audio for _, _, audio in pipe(texto, voice="pm_alex", speed=0.8)]
+        # VOZ e VELOCIDADE servem para os testes da importação (outra voz, outro ritmo)
+        pedacos = [audio for _, _, audio in pipe(texto, voice=os.environ.get("VOZ", "pm_alex"), speed=float(os.environ.get("VELOCIDADE", "0.8")))]
         onda = np.concatenate([p.numpy() if hasattr(p, "numpy") else p for p in pedacos])
         sf.write(destino, onda, 24000)
         print(f"{nome}: {len(onda) / 24000:.1f} s", flush=True)
