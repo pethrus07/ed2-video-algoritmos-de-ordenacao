@@ -285,9 +285,14 @@ function etapaAudio() {
     if (dur > cursor + 0.05) manter.push([cursor, dur]);
     const pedacos = manter.map(([a, b], n) => `[0:a]atrim=start=${a.toFixed(3)}:end=${b.toFixed(3)},asetpts=PTS-STARTPTS,afade=t=in:d=0.012,afade=t=out:st=${Math.max(0, b - a - 0.015).toFixed(3)}:d=0.015[p${n}]`);
     const junta = manter.length > 1 ? `${manter.map((_, n) => `[p${n}]`).join("")}concat=n=${manter.length}:v=0:a=1[j]` : "[p0]anull[j]";
-    // limpeza de gravação de celular: tira o ronco grave, baixa o chiado de fundo e apara as pontas
+    // Limpeza de gravação de celular, escolhida por medição (NISQA, na esteira de QA): corta o ronco grave,
+    // tira o ruído de ambiente com o RNNoise e um resto com redução espectral leve, e dá um pouco de presença.
+    // Compressor e redução mais forte pioraram a medida e ficaram de fora. O modelo do RNNoise (sh.rnnn, de
+    // github.com/GregorR/rnnoise-models) fica em video/trabalho/modelos; sem ele, só a redução espectral.
+    const modelo = path.join(TRAB, "modelos", "sh.rnnn");
+    const limpeza = fs.existsSync(modelo) ? `highpass=f=85,arnndn=m='${modelo.replace(/\\/g, "/").replace(/:/g, "\\:")}':mix=0.9,afftdn=nr=8:nf=-55,equalizer=f=3800:t=q:w=1.1:g=2` : "highpass=f=85,afftdn=nr=10:nf=-45";
     const limpo = saida.replace(/\.wav$/, "-limpo.wav");
-    rodar("ffmpeg", ["-y", "-v", "error", "-i", bruto, "-filter_complex", `${pedacos.join(";")};${junta};[j]highpass=f=80,afftdn=nr=8:nf=-45,${pontas}[o]`, "-map", "[o]", "-ar", "48000", "-ac", "1", limpo]);
+    rodar("ffmpeg", ["-y", "-v", "error", "-i", bruto, "-filter_complex", `${pedacos.join(";")};${junta};[j]${limpeza},${pontas}[o]`, "-map", "[o]", "-ar", "48000", "-ac", "1", limpo]);
     // cada trecho foi gravado a uma distância diferente do celular: todos saem no mesmo volume, com um ganho só
     const medida = spawnSync("ffmpeg", ["-hide_banner", "-i", limpo, "-af", "loudnorm=print_format=json", "-f", "null", "-"], { encoding: "utf8" }).stderr;
     const abre = medida.lastIndexOf("{"), m = JSON.parse(medida.slice(abre, medida.indexOf("}", abre) + 1));
@@ -304,18 +309,23 @@ function etapaAudio() {
 }
 const clampNum = (x, a, b) => Math.min(b, Math.max(a, x));
 
+/** A transcrição escreve "3", "100" e "1.000" onde o texto diz "três", "cem" e "mil": os dois lados viram a mesma forma. */
+const NUMEROS = { um: "1", uma: "1", dois: "2", duas: "2", tres: "3", quatro: "4", cinco: "5", seis: "6", sete: "7", oito: "8", nove: "9", dez: "10", dezessete: "17", dezoito: "18", vinte: "20", cem: "100", mil: "1000", "000": "1000" };
+const comparavel = (w) => { const n = semAcento(w).replace(/ /g, ""); return NUMEROS[n] || n; };
 /** Palavras do texto de uma cena, do jeito que se comparam com a transcrição: sem acento, sem pontuação. */
-const palavrasDoTexto = (c) => falaLimpa(c.fala).split(" ").map((w) => semAcento(w).replace(/ /g, "")).filter(Boolean);
+const palavrasDoTexto = (c) => falaLimpa(c.fala).split(" ").map(comparavel).filter(Boolean);
 
 /**
  * Segue a transcrição de uma gravação ao lado do texto da cena e acha o que precisa sair:
  *  - retomadas: o narrador erra, para e repete a frase (quatro palavras seguidas voltam a um ponto
  *    anterior do texto); sai a tentativa anterior, daquele ponto em diante;
+ *  - no fim da gravação, se a última tentativa de uma frase ficou mais curta que uma anterior, fica a
+ *    mais completa;
  *  - conversa antes da primeira palavra do texto ou depois da última ("testando", "pronto, é isso").
  * Devolve os cortes e quanto do texto foi dito (cobertura, de 0 a 1).
  */
 function seguirRoteiro(c, palavras) {
-  const S = palavrasDoTexto(c), T = palavras.map((w) => semAcento(w.texto).replace(/ /g, "")), mapa = new Array(T.length).fill(-1), cortes = [];
+  const S = palavrasDoTexto(c), T = palavras.map((w) => comparavel(w.texto)), mapa = new Array(T.length).fill(-1), cortes = [], tentativas = [];
   const bate = (i, j, n) => { for (let x = 0; x < n; x++) { if (i + x >= T.length) return x >= 2; if (j + x >= S.length || T[i + x] !== S[j + x]) return false; } return true; };
   let p = 0;
   for (let i = 0; i < T.length; i++) {
@@ -326,24 +336,42 @@ function seguirRoteiro(c, palavras) {
     // a fala pulou um pedaço do texto: segue de onde voltou a bater
     for (let d = 5; d <= 40 && j < 0; d++) if (p + d < S.length && bate(i, p + d, 3)) j = p + d;
     if (j < 0) {
-      for (let b = p - 2; b >= Math.max(0, p - 45) && j < 0; b--) if (bate(i, b, 4)) j = b;
+      for (let b = p - 2; b >= 0 && j < 0; b--) if (bate(i, b, 4)) j = b;
       if (j >= 0) {
         // a tentativa descartada: da primeira palavra já dita desse ponto do texto em diante, até a retomada
         let antes = -1; for (let x = 0; x < i; x++) if (mapa[x] >= 0 && mapa[x] < j) antes = x;
         let primeira = -1; for (let x = antes + 1; x < i && primeira < 0; x++) if (mapa[x] >= j) primeira = x;
         if (primeira >= 0) {
           const de = primeira > 0 ? (palavras[primeira - 1].fim + palavras[primeira].ini) / 2 : 0, ate = Math.max(de, palavras[i].ini - 0.06);
-          if (ate - de > 0.25 && ate - de < 60) { cortes.push({ de, ate, texto: palavras.slice(primeira, i).map((w) => w.texto).join(" ") }); for (let x = primeira; x < i; x++) mapa[x] = -2; }
+          if (ate - de > 0.25 && ate - de < 90) {
+            const corte = { de, ate, texto: palavras.slice(primeira, i).map((w) => w.texto).join(" ") };
+            cortes.push(corte);
+            tentativas.push({ de: primeira, ate: i, corte, original: mapa.slice(primeira, i), alcance: Math.max(...mapa.slice(primeira, i)) });
+            for (let x = primeira; x < i; x++) mapa[x] = -2;
+          }
         }
       }
     }
     if (j >= 0) { mapa[i] = j; p = j + 1; }
   }
+  // fim da gravação: entre as tentativas seguidas da última frase, fica a que foi mais longe no texto
+  if (tentativas.length) {
+    const cadeia = [tentativas[tentativas.length - 1]];
+    for (let k = tentativas.length - 2; k >= 0 && tentativas[k].ate === cadeia[0].de; k--) cadeia.unshift(tentativas[k]);
+    const inicioFinal = cadeia[cadeia.length - 1].ate, alcanceFinal = Math.max(-1, ...mapa.slice(inicioFinal).filter((j) => j >= 0));
+    const melhor = cadeia.reduce((m, t) => (t.alcance > m.alcance ? t : m), { alcance: alcanceFinal });
+    if (melhor.corte) {
+      for (let x = melhor.de; x < melhor.ate; x++) mapa[x] = melhor.original[x - melhor.de];
+      for (let x = melhor.ate; x < T.length; x++) mapa[x] = -2;
+      cortes.splice(cortes.indexOf(melhor.corte), 1);
+      cortes.push({ de: (palavras[melhor.ate - 1].fim + palavras[melhor.ate].ini) / 2, ate: palavras[T.length - 1].fim + 600, texto: palavras.slice(melhor.ate).map((w) => w.texto).join(" ") });
+    }
+  }
   const ditas = mapa.map((j, i) => (j >= 0 ? i : -1)).filter((i) => i >= 0);
   if (ditas.length) {
     const a = ditas[0], z = ditas[ditas.length - 1];
     if (a >= 4 && mapa[a] <= 3) cortes.push({ de: 0, ate: Math.max(0, palavras[a].ini - 0.08), texto: palavras.slice(0, a).map((w) => w.texto).join(" ") });
-    if (T.length - 1 - z >= 4 && mapa[z] >= S.length - 4) cortes.push({ de: palavras[z].fim + 0.2, ate: palavras[T.length - 1].fim + 600, texto: palavras.slice(z + 1).map((w) => w.texto).join(" ") });
+    if (T.length - 1 - z >= 4 && mapa[z] >= S.length - 4 && !mapa.slice(z + 1).includes(-2)) cortes.push({ de: palavras[z].fim + 0.2, ate: palavras[T.length - 1].fim + 600, texto: palavras.slice(z + 1).map((w) => w.texto).join(" ") });
   }
   // retomadas encaixadas viram um corte só
   cortes.sort((x, y) => x.de - y.de);

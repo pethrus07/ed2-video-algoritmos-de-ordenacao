@@ -166,6 +166,10 @@ A animação é código: cada quadro é desenhado por uma função do tempo, em 
   são conferidos contra o que o programa produziu, e a produção para se algum não bater;
 - a animação acompanha a narração: o áudio é transcrito com o instante de cada palavra, e cada
   ponto de sincronia do roteiro é ligado ao momento em que a frase é dita;
+- a narração foi gravada no celular, em um áudio só. A produção transcreve o áudio na própria
+  máquina, alinha com o texto do roteiro para separar as cenas, corta as frases que foram
+  repetidas por erro, reduz o ruído de ambiente (RNNoise e redução espectral, escolhidos por
+  medição de qualidade de voz) e deixa todas as cenas no mesmo volume;
 - o fundo sonoro é gerado por código (acordes longos, sem arquivo de terceiros).
 
 Para refazer (Windows, Node 20, ffmpeg e Playwright; a transcrição usa faster-whisper):
@@ -175,5 +179,8 @@ node video/construir.mjs gravar   # abre o Windows Terminal e grava a execução
 node video/construir.mjs tudo     # dados, falas, áudio, sincronia, trilha, legendas e render
 ```
 
-Os áudios da narração ficam em `video/narracao/`, um por cena, fora do repositório. Sem eles a
-produção usa uma voz sintética local só para medir o tempo.
+A narração entra com `node video/construir.mjs importar <pasta ou arquivos>`: vale um áudio por
+cena, um áudio só com tudo ou qualquer divisão. Os áudios ficam em `video/narracao/`, um por
+cena, fora do repositório. Sem eles a produção usa uma voz sintética local só para medir o tempo.
+O modelo do RNNoise (`sh.rnnn`, de github.com/GregorR/rnnoise-models) é opcional e fica em
+`video/trabalho/modelos/`; sem ele a limpeza usa só a redução espectral do ffmpeg.
