@@ -110,6 +110,9 @@ CENAS.escala = {
     if (aGraf > 0.01) {
       ctx.save(); ctx.globalAlpha *= aGraf;
       texto(ctx, emTempo < 0.5 ? "COMPARAÇÕES" : "TEMPO NESTA MÁQUINA", x0, 300, { tam: 24, peso: 600, cor: COR.fraco, espaco: 3, alfa: Math.abs(emTempo - 0.5) * 2 });
+      // de onde vêm os números: entra com a fala "medimos no nosso programa", antes da primeira barra
+      const aOrigem = visivel(t, qG + 0.15, qV - 0.2, 0.4);
+      texto(ctx, "medido pelo nosso programa em Java · java Demonstracao", x0, 348, { tam: 30, cor: COR.texto, alfa: aOrigem * (1 - emTempo) });
       this.linhas.forEach((l, i) => {
         const y = 370 + i * 170, k = E.out5(fase(t, entra[i], 2.6)), a = E.out(fase(t, entra[i] - 0.2, 0.4));
         const fracComps = l.comps / this.linhas[0].comps, fracMs = l.ms / this.linhas[0].ms, frac = lerp(fracComps, fracMs, emTempo);

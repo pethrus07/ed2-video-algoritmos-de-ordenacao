@@ -6,7 +6,8 @@ Trabalho em vídeo de Estruturas de Dados 2, Unipê, Prof. Ed (2026.2).
 |---|---|
 | Tema | Algoritmos de Ordenação: Bubble Sort, Insertion Sort e Merge Sort (recursivo) |
 | Dupla | Pedro Oliveira e Izaias Terto |
-| Vídeo | LINK_DO_VIDEO |
+| Vídeo | no YouTube (o link entra aqui assim que o vídeo for publicado) |
+| Duração | 7 min 31 s, narrado pelo Izaias |
 | Linguagem | Java 17, sem biblioteca externa |
 
 ## O que é
@@ -23,6 +24,24 @@ estratégias diferentes:
 
 O vídeo mostra a ideia de cada um em animação, percorre o código, coloca os três para correr com
 a mesma lista e mede a diferença com 100.000 valores.
+
+## Roteiro do vídeo
+
+| Tempo | Capítulo | O que tem |
+|---|---|---|
+| 0:00 | Abertura | onde a ordenação aparece no dia a dia, a dupla e os três algoritmos |
+| 0:29 | Por que ordenar | busca um por um contra busca pela metade: 1.000.000 de passos contra 20 |
+| 0:54 | Bubble Sort | a ideia, em animação, com o vetor `[5, 2, 8, 1, 9, 3, 7, 4]` |
+| 1:26 | Bubble Sort no código | o método linha a linha, rodando ao lado, e o custo n(n − 1)/2 |
+| 1:59 | Insertion Sort | a ideia com cartas na mão, e a mão quase ordenada |
+| 2:32 | Insertion Sort no código | a chave e a vaga; pior caso (499.500) e melhor caso (999) |
+| 3:02 | Merge Sort | dividir para conquistar: a árvore de divisões e a volta intercalando |
+| 3:41 | Merge Sort no código | a função recursiva, a pilha de chamadas e a intercalação com os três índices |
+| 4:18 | A corrida | os três com a mesma lista de 64 valores: 309, 1.020 e 1.950 comparações |
+| 4:46 | Em escala | 100.000 valores: comparações, tempo e as curvas n² e n log n |
+| 5:13 | O programa rodando | gravação do terminal: compilação, as quatro cenas da demonstração e os testes |
+| 6:33 | Comparação | a tabela de complexidade, estabilidade e o TimSort do Java |
+| 7:07 | Fecho | o que levar e o endereço deste repositório |
 
 ## Como compilar e executar
 
@@ -68,9 +87,13 @@ video/
   cena.html           a página que desenha os quadros
   motor/, cenas/      a animação, escrita em JavaScript puro sobre <canvas>
   construir.mjs       a linha de produção: gravação do terminal, dados, áudio, sincronia e render
-  ferramentas/        a sessão gravada do terminal, a transcrição com tempos, o fundo sonoro
+  ferramentas/        apoio da produção: a sessão gravada do terminal, a transcrição com tempos,
+                      o alinhamento da narração com o roteiro, o fundo sonoro
 executar.ps1, executar.sh
 ```
+
+Quem quer só o trabalho da disciplina precisa apenas de `src/` e dos dois scripts de execução.
+A pasta `video/` é a produção do vídeo e não é necessária para compilar nem para rodar o código.
 
 O código está comentado em dois níveis: em cima de cada método, o que ele faz e por que funciona;
 dentro dele, uma linha antes de cada decisão (por que o laço encolhe, por que a chave é guardada,
@@ -100,9 +123,9 @@ E a cena 4, com 100.000 valores, dá a medida da diferença:
 
 | Algoritmo | Comparações | Tempo nas nossas medições |
 |---|---|---|
-| Bubble Sort | 4.999.834.079 | de 12 a 22 s |
-| Insertion Sort | 2.504.337.312 | de 1 a 3 s |
-| Merge Sort | 1.536.426 | de 10 a 30 ms |
+| Bubble Sort | 4.999.834.079 | de 12 a 22 s (12,7 s na execução do vídeo) |
+| Insertion Sort | 2.504.337.312 | de 1 a 3 s (1,4 s) |
+| Merge Sort | 1.536.426 | de 10 a 30 ms (16 ms) |
 
 Os valores são sorteados com semente fixa, então o número de comparações se repete em qualquer
 máquina. O tempo muda de uma máquina para outra, e na mesma máquina muda com o que mais ela está
@@ -158,7 +181,8 @@ A animação é código: cada quadro é desenhado por uma função do tempo, em 
 - a cena do terminal é uma gravação de tela do Windows Terminal: `javac`, a demonstração e os
   testes rodando de verdade, na velocidade real. A espera do Bubble Sort com 100.000 valores está
   inteira, sem corte. Só a espera entre um comando e outro foi ajustada à narração. Na gravação
-  os programas rodam com prioridade alta, para a medição depender menos do resto da máquina;
+  os programas rodam com prioridade alta e sem o freio de energia que o Windows 11 aplica a
+  janelas sem foco, que quase dobrava o tempo medido;
 - os números do gráfico em escala são os dessa mesma execução gravada;
 - os três algoritmos foram reescritos em JavaScript para a animação, e a produção para se o
   número de comparações deles for diferente do que o Java mediu;

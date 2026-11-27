@@ -105,7 +105,7 @@ CENAS.insertionIdeia = {
       const a = visivel(t, c.q("cartas"), Infinity, 0.5);
       contador(ctx, 1210, 880, estado.comps, "comparações", { alfa: a });
       contador(ctx, 1480, 880, estado.movs, "cartas que andaram", { cor: COR.ambar, alfa: a });
-      if (segunda) texto(ctx, "uma mão quase ordenada", 262, 280, { tam: 34, cor: COR.fraco, alfa: a2 });
+      if (segunda) texto(ctx, "uma mão quase ordenada", 262, 880, { tam: 38, peso: 600, cor: COR.texto, alfa: a2 }); // embaixo, à esquerda: em cima ficaria sob o selo da comparação
     }
     legendaPorTempo(ctx, t, [
       [c.q("cartas") + 0.2, "Pega a próxima carta e compara, da direita para a esquerda."],

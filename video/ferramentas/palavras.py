@@ -32,7 +32,11 @@ def transcrever(modelo, arquivo):
 def main():
     entrada, saida = sys.argv[1], sys.argv[2]
     os.makedirs(saida, exist_ok=True)
-    modelo, onde = WhisperModel("large-v3-turbo", device="cuda", compute_type="float16"), "GPU"
+    # WHISPER=cpu roda no processador: mais lento, mas não disputa a placa de vídeo com outro programa
+    if os.environ.get("WHISPER", "").lower() == "cpu":
+        modelo, onde = WhisperModel("large-v3-turbo", device="cpu", compute_type="int8"), "CPU"
+    else:
+        modelo, onde = WhisperModel("large-v3-turbo", device="cuda", compute_type="float16"), "GPU"
     for nome in sorted(f for f in os.listdir(entrada) if f.endswith(".wav")):
         destino = os.path.join(saida, nome[:-4] + ".json")
         origem = os.path.join(entrada, nome)

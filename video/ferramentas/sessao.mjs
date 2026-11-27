@@ -44,6 +44,8 @@ function executa(comando, aoVer) {
     const p = spawn(programa, argumentos, { cwd: raiz, stdio: ["pipe", "pipe", "inherit"] });
     // prioridade alta: a medição de tempo depende menos do que mais a máquina estiver fazendo na hora
     try { os.setPriority(p.pid, os.constants.priority.PRIORITY_HIGH); } catch { /* sem permissão: segue na prioridade normal */ }
+    // e sem o freio que o Windows 11 põe em programa de janela sem foco (ver sem-freio.ps1)
+    spawn("pwsh", ["-NoProfile", "-File", new URL("./sem-freio.ps1", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"), String(p.pid)], { stdio: "ignore" });
     let resto = "";
     p.stdout.on("data", (bloco) => {
       escreve(bloco);

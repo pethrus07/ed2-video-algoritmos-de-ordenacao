@@ -143,8 +143,12 @@ async function etapaGravar() {
   }
   if (saidaDeVideo < 0) throw new Error(`não achei a saída de vídeo do monitor de ${mw}x${mh}`);
   const par = (n) => n - (n % 2);
-  const ff = spawn("ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i", `ddagrab=output_idx=${saidaDeVideo}:offset_x=${jx - mx}:offset_y=${jy - my}:video_size=${par(jw)}x${par(jh)}:framerate=30:draw_mouse=0`,
-    "-vf", "hwdownload,format=bgra", "-c:v", "libx264rgb", "-preset", "ultrafast", "-qp", "0", bruto], { stdio: ["pipe", "inherit", "pipe"] });
+  const ff = spawn("ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i", `ddagrab=output_idx=${saidaDeVideo}:offset_x=${jx - mx}:offset_y=${jy - my}:video_size=${par(jw)}x${par(jh)}:framerate=${process.env.GRAVAR_QPS || 15}:draw_mouse=0`,
+    // Compressão sem perdas no processador. GRAVAR_NA_PLACA=1 usa a placa de vídeo, mas só funciona quando o monitor
+    // gravado é desenhado por ela (no notebook com duas placas, a tela interna é da integrada e o codificador recusa).
+    ...(!process.env.GRAVAR_NA_PLACA ? ["-vf", "hwdownload,format=bgra", "-c:v", "libx264rgb", "-preset", "ultrafast", "-qp", "0", "-threads", "2"] : ["-c:v", "h264_nvenc", "-preset", "p1", "-tune", "lossless", "-profile:v", "high444p"]), bruto], { stdio: ["pipe", "inherit", "pipe"] });
+  // a captura não pode roubar processador do programa que está sendo medido: 15 quadros por segundo bastam para texto, e o gravador roda em prioridade baixa
+  try { os.setPriority(ff.pid, os.constants.priority.PRIORITY_BELOW_NORMAL); } catch { /* segue na prioridade normal */ }
   let erroFf = ""; ff.stderr.on("data", (b) => (erroFf += b));
   const acabou = new Promise((r) => ff.on("close", r));
   const limite = Date.now() + 240000;
@@ -281,6 +285,13 @@ function etapaAudio() {
     const bruto = path.join(brutos, `${num(i)}-${c.id}.wav`), cortes = repeticoes(c, JSON.parse(fs.readFileSync(bruto.replace(/\.wav$/, ".json"), "utf8")));
     const dur = duracaoDe(bruto), manter = []; let cursor = 0;
     cortes.forEach((k) => { k.ate = Math.min(k.ate, dur); });
+    // O instante de cada palavra, na transcrição, erra por alguns centésimos. As duas pontas de cada corte
+    // vão para o ponto mais silencioso entre as palavras vizinhas: a emenda cai na pausa, e não em cima da voz.
+    const onda = amostrasDe(bruto);
+    for (const k of cortes) {
+      if (k.deJanela && k.deJanela[1] - k.deJanela[0] > 0.05) k.de = maisQuieto(onda, k.deJanela[0], k.deJanela[1]);
+      if (k.ateJanela && k.ateJanela[1] - k.ateJanela[0] > 0.05 && k.ate < dur - 0.01) k.ate = Math.max(k.de, maisQuieto(onda, k.ateJanela[0], k.ateJanela[1]));
+    }
     for (const k of cortes) { if (k.de > cursor + 0.05) manter.push([cursor, k.de]); cursor = Math.max(cursor, k.ate); }
     if (dur > cursor + 0.05) manter.push([cursor, dur]);
     const pedacos = manter.map(([a, b], n) => `[0:a]atrim=start=${a.toFixed(3)}:end=${b.toFixed(3)},asetpts=PTS-STARTPTS,afade=t=in:d=0.012,afade=t=out:st=${Math.max(0, b - a - 0.015).toFixed(3)}:d=0.015[p${n}]`);
@@ -308,6 +319,21 @@ function etapaAudio() {
   console.log(`áudio: ${real.filter(Boolean).length} cenas com narração real (${nCortes} repetições cortadas), ${real.filter((r) => !r).length} com prévia sintética`);
 }
 const clampNum = (x, a, b) => Math.min(b, Math.max(a, x));
+/** O áudio como números (mono, 16 kHz), para achar as pausas. */
+function amostrasDe(arq) {
+  const r = spawnSync("ffmpeg", ["-v", "error", "-i", arq, "-ac", "1", "-ar", "16000", "-f", "f32le", "-"], { maxBuffer: 1 << 28 });
+  if (r.status !== 0) throw new Error("não consegui ler o áudio " + arq);
+  return new Float32Array(r.stdout.buffer.slice(r.stdout.byteOffset, r.stdout.byteOffset + (r.stdout.length & ~3)));
+}
+/** Centro da janela de 30 ms com menos energia entre os instantes a e b. */
+function maisQuieto(onda, a, b, taxa = 16000) {
+  const w = Math.round(0.03 * taxa), passo = Math.round(0.005 * taxa); let menor = Infinity, t = (a + b) / 2;
+  for (let i = Math.max(0, Math.round(a * taxa)); i + w <= Math.min(onda.length, Math.round(b * taxa)); i += passo) {
+    let e = 0; for (let x = 0; x < w; x++) e += onda[i + x] * onda[i + x];
+    if (e < menor) { menor = e; t = (i + w / 2) / taxa; }
+  }
+  return t;
+}
 
 /** A transcrição escreve "3", "100" e "1.000" onde o texto diz "três", "cem" e "mil": os dois lados viram a mesma forma. */
 const NUMEROS = { um: "1", uma: "1", dois: "2", duas: "2", tres: "3", quatro: "4", cinco: "5", seis: "6", sete: "7", oito: "8", nove: "9", dez: "10", dezessete: "17", dezoito: "18", vinte: "20", cem: "100", mil: "1000", "000": "1000" };
@@ -344,7 +370,8 @@ function seguirRoteiro(c, palavras) {
         if (primeira >= 0) {
           const de = primeira > 0 ? (palavras[primeira - 1].fim + palavras[primeira].ini) / 2 : 0, ate = Math.max(de, palavras[i].ini - 0.06);
           if (ate - de > 0.25 && ate - de < 90) {
-            const corte = { de, ate, texto: palavras.slice(primeira, i).map((w) => w.texto).join(" ") };
+            const corte = { de, ate, texto: palavras.slice(primeira, i).map((w) => w.texto).join(" "),
+              deJanela: primeira > 0 ? [palavras[primeira - 1].fim, palavras[primeira].ini] : null, ateJanela: [palavras[i - 1].fim, palavras[i].ini] };
             cortes.push(corte);
             tentativas.push({ de: primeira, ate: i, corte, original: mapa.slice(primeira, i), alcance: Math.max(...mapa.slice(primeira, i)) });
             for (let x = primeira; x < i; x++) mapa[x] = -2;
@@ -364,18 +391,19 @@ function seguirRoteiro(c, palavras) {
       for (let x = melhor.de; x < melhor.ate; x++) mapa[x] = melhor.original[x - melhor.de];
       for (let x = melhor.ate; x < T.length; x++) mapa[x] = -2;
       cortes.splice(cortes.indexOf(melhor.corte), 1);
-      cortes.push({ de: (palavras[melhor.ate - 1].fim + palavras[melhor.ate].ini) / 2, ate: palavras[T.length - 1].fim + 600, texto: palavras.slice(melhor.ate).map((w) => w.texto).join(" ") });
+      cortes.push({ de: (palavras[melhor.ate - 1].fim + palavras[melhor.ate].ini) / 2, ate: palavras[T.length - 1].fim + 600, texto: palavras.slice(melhor.ate).map((w) => w.texto).join(" "),
+        deJanela: [palavras[melhor.ate - 1].fim, palavras[melhor.ate].ini] });
     }
   }
   const ditas = mapa.map((j, i) => (j >= 0 ? i : -1)).filter((i) => i >= 0);
   if (ditas.length) {
     const a = ditas[0], z = ditas[ditas.length - 1];
-    if (a >= 4 && mapa[a] <= 3) cortes.push({ de: 0, ate: Math.max(0, palavras[a].ini - 0.08), texto: palavras.slice(0, a).map((w) => w.texto).join(" ") });
-    if (T.length - 1 - z >= 4 && mapa[z] >= S.length - 4 && !mapa.slice(z + 1).includes(-2)) cortes.push({ de: palavras[z].fim + 0.2, ate: palavras[T.length - 1].fim + 600, texto: palavras.slice(z + 1).map((w) => w.texto).join(" ") });
+    if (a >= 4 && mapa[a] <= 3) cortes.push({ de: 0, ate: Math.max(0, palavras[a].ini - 0.08), texto: palavras.slice(0, a).map((w) => w.texto).join(" "), ateJanela: [palavras[a - 1].fim, palavras[a].ini] });
+    if (T.length - 1 - z >= 4 && mapa[z] >= S.length - 4 && !mapa.slice(z + 1).includes(-2)) cortes.push({ de: palavras[z].fim + 0.2, ate: palavras[T.length - 1].fim + 600, texto: palavras.slice(z + 1).map((w) => w.texto).join(" "), deJanela: [palavras[z].fim, palavras[z + 1].ini] });
   }
   // retomadas encaixadas viram um corte só
   cortes.sort((x, y) => x.de - y.de);
-  const juntos = cortes.reduce((lista, k) => { const u = lista[lista.length - 1]; if (u && k.de <= u.ate) { u.ate = Math.max(u.ate, k.ate); u.texto += " … " + k.texto; } else lista.push({ ...k }); return lista; }, []);
+  const juntos = cortes.reduce((lista, k) => { const u = lista[lista.length - 1]; if (u && k.de <= u.ate) { if (k.ate > u.ate) { u.ate = k.ate; u.ateJanela = k.ateJanela; } u.texto += " … " + k.texto; } else lista.push({ ...k }); return lista; }, []);
   return { cortes: juntos, cobertura: new Set(mapa.filter((j) => j >= 0)).size / S.length };
 }
 const repeticoes = (c, palavras) => seguirRoteiro(c, palavras).cortes;
@@ -423,7 +451,17 @@ function marcasDaCena(c, i, duracaoAudio) {
         const nota = iguais - Math.abs(w.ini - estimado) * 0.08;
         if (iguais >= Math.min(2, alvo.length) && (!melhor || nota > melhor.nota)) melhor = { nota, t: w.ini, k };
       });
-      if (melhor) { t = melhor.t; pelaVoz++; }
+      if (!melhor) {
+        // segunda tentativa: a primeira palavra bate e, das seis primeiras do trecho, pelo menos três aparecem em seguida, na ordem
+        const seis = semAcento(partes[p + 1] || "").split(" ").slice(0, 6);
+        palavras.forEach((w, k) => {
+          if (Math.abs(w.ini - estimado) > 5 || semAcento(w.texto) !== seis[0]) return;
+          let achadas = 1, x = k + 1;
+          for (let a = 1; a < seis.length; a++) for (let y = x; y < Math.min(palavras.length, k + 9); y++) if (semAcento(palavras[y].texto) === seis[a]) { achadas++; x = y + 1; break; }
+          const nota = achadas - Math.abs(w.ini - estimado) * 0.08;
+          if (achadas >= 3 && (!melhor || nota > melhor.nota)) melhor = { nota, t: w.ini, k };
+        });
+      }      if (melhor) { t = melhor.t; pelaVoz++; } else console.log(`  aviso: na cena ${c.id}, a marca {{${partes[p]}}} não foi achada na voz e ficou pela posição no texto (${(ATRASO + t).toFixed(1)} s)`);
       // onde o áudio pode ser cortado antes desta marca: no meio do silêncio que a antecede
       cortes[partes[p]] = melhor && melhor.k > 0 ? +((palavras[melhor.k - 1].fim + melhor.t) / 2).toFixed(3) : Math.max(0, +(t - 0.08).toFixed(3));
     } else cortes[partes[p]] = Math.max(0, +(t - 0.08).toFixed(3));
